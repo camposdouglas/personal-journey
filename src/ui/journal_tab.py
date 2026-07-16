@@ -98,35 +98,15 @@ class JournalTab(QWidget):
         self.title_input.setText(title)
         self.content_editor.setText(content)
 
-        self.title_input.setReadOnly(True)
-        self.content_editor.setReadOnly(True)
-
-        self.title_input.setCursor(Qt.ArrowCursor)
-        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
-
-        self.edit_button.setEnabled(True)
-        self.save_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
-        self.delete_button.setEnabled(True)
+        self.enter_read_mode()
 
     def enable_editing(self):
-        self.is_editing = True
-
         self.title_input.setProperty("original_text", self.title_input.text())
         self.content_editor.setProperty(
             "original_text", self.content_editor.toPlainText()
         )
 
-        self.title_input.setReadOnly(False)
-        self.content_editor.setReadOnly(False)
-
-        self.edit_button.setEnabled(False)
-        self.save_button.setEnabled(True)
-        self.cancel_button.setEnabled(True)
-        self.delete_button.setEnabled(False)
-
-        self.title_input.setCursor(Qt.IBeamCursor)
-        self.content_editor.viewport().setCursor(Qt.IBeamCursor)
+        self.enter_edit_mode()
 
     def save_entry(self):
         if self.current_entry_title is None:
@@ -161,18 +141,7 @@ class JournalTab(QWidget):
 
         self.is_editing = False
 
-        self.title_input.setText(new_title)
-
-        self.title_input.setReadOnly(True)
-        self.content_editor.setReadOnly(True)
-
-        self.title_input.setCursor(Qt.ArrowCursor)
-        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
-
-        self.edit_button.setEnabled(True)
-        self.save_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
-        self.delete_button.setEnabled(True)
+        self.enter_read_mode()
 
     def cancel_editing(self):
         if self.is_new_entry:
@@ -197,16 +166,7 @@ class JournalTab(QWidget):
         self.title_input.setText(original_title)
         self.content_editor.setText(original_content)
 
-        self.title_input.setReadOnly(True)
-        self.content_editor.setReadOnly(True)
-
-        self.title_input.setCursor(Qt.ArrowCursor)
-        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
-
-        self.edit_button.setEnabled(True)
-        self.save_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
-        self.delete_button.setEnabled(True)
+        self.enter_read_mode()
 
     def delete_entry(self):
         if self.current_entry_title is None:
@@ -253,6 +213,39 @@ class JournalTab(QWidget):
         self.title_input.clear()
         self.content_editor.clear()
 
+        self.enter_empty_mode()
+
+    def enter_read_mode(self):
+        self.is_editing = False
+
+        self.title_input.setReadOnly(True)
+        self.content_editor.setReadOnly(True)
+
+        self.title_input.setCursor(Qt.ArrowCursor)
+        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
+
+        self.edit_button.setEnabled(True)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.delete_button.setEnabled(True)
+
+    def enter_edit_mode(self):
+        self.is_editing = True
+
+        self.title_input.setReadOnly(False)
+        self.content_editor.setReadOnly(False)
+
+        self.title_input.setCursor(Qt.IBeamCursor)
+        self.content_editor.viewport().setCursor(Qt.IBeamCursor)
+
+        self.edit_button.setEnabled(False)
+        self.save_button.setEnabled(True)
+        self.cancel_button.setEnabled(True)
+        self.delete_button.setEnabled(False)
+
+    def enter_empty_mode(self):
+        self.is_editing = False
+
         self.title_input.setReadOnly(True)
         self.content_editor.setReadOnly(True)
 
@@ -279,22 +272,11 @@ class JournalTab(QWidget):
 
         self.current_entry_title = temporary_title
         self.is_new_entry = True
-        self.is_editing = True
 
         self.title_input.setText(temporary_title)
         self.content_editor.clear()
 
-        self.title_input.setReadOnly(False)
-        self.content_editor.setReadOnly(False)
-
-        self.title_input.setCursor(Qt.IBeamCursor)
-        self.content_editor.viewport().setCursor(Qt.IBeamCursor)
-
-        self.edit_button.setEnabled(False)
-        self.save_button.setEnabled(True)
-        self.cancel_button.setEnabled(True)
-        self.delete_button.setEnabled(False)
-
+        self.enter_edit_mode()
         self.content_editor.setFocus()
 
 
