@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -78,6 +79,7 @@ class JournalTab(QWidget):
         self.edit_button.clicked.connect(self.enable_editing)
         self.save_button.clicked.connect(self.save_entry)
         self.cancel_button.clicked.connect(self.cancel_editing)
+        self.delete_button.clicked.connect(self.delete_entry)
 
         main_layout.addWidget(self.entries_panel, 2)
         main_layout.addWidget(self.entry_viewer_panel, 3)
@@ -205,6 +207,42 @@ class JournalTab(QWidget):
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.delete_button.setEnabled(True)
+
+    def delete_entry(self):
+        if self.current_entry_title is None:
+            return
+
+        if self.is_editing:
+            return
+
+        title_to_delete = self.current_entry_title
+
+        confirmation_box = QMessageBox(self)
+        confirmation_box.setWindowTitle("Delete Entry")
+        confirmation_box.setText(
+            f"Are you sure you want to delete '{title_to_delete}'?"
+        )
+
+        yes_button = confirmation_box.addButton("Yes", QMessageBox.AcceptRole)
+        no_button = confirmation_box.addButton("No", QMessageBox.RejectRole)
+
+        confirmation_box.setDefaultButton(no_button)
+        confirmation_box.exec()
+
+        if confirmation_box.clickedButton() != yes_button:
+            return
+
+        self.mock_entries.pop(title_to_delete, None)
+
+        matching_items = self.entries_list.findItems(title_to_delete, Qt.MatchExactly)
+
+        if matching_items:
+            row = self.entries_list.row(matching_items[0])
+
+            if row != -1:
+                self.entries_list.takeItem(row)
+
+        self.clear_entry_viewer()
 
     def clear_entry_viewer(self):
         if self.is_editing:
