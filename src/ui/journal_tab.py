@@ -9,10 +9,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 
 class ClearableListWidget(QListWidget):
+    emptyAreaDoubleClicked = Signal()
+
     def mousePressEvent(self, event):
         clicked_item = self.itemAt(event.position().toPoint())
 
@@ -22,10 +24,24 @@ class ClearableListWidget(QListWidget):
 
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        clicked_item = self.itemAt(event.position().toPoint())
+
+        if clicked_item is None:
+            self.clearSelection()
+            self.setCurrentRow(-1)
+            self.emptyAreaDoubleClicked.emit()
+            return
+
+        super().mouseDoubleClickEvent(event)
+
 
 class JournalTab(QWidget):
     def __init__(self):
         super().__init__()
+
+        self.current_entry_title = None
+        self.is_editing = False
 
         main_layout = QHBoxLayout()
 
@@ -48,6 +64,11 @@ class JournalTab(QWidget):
         self.entries_panel, self.entries_list = create_entries_panel(self.mock_entries)
 
         self.entries_list.itemDoubleClicked.connect(self.open_entry)
+        self.entries_list.emptyAreaDoubleClicked.connect(self.clear_entry_viewer)
+
+        self.edit_button.clicked.connect(self.enable_editing)
+        self.save_button.clicked.connect(self.save_entry)
+        self.cancel_button.clicked.connect(self.cancel_editing)
 
         main_layout.addWidget(self.entries_panel, 2)
         main_layout.addWidget(self.entry_viewer_panel, 3)
@@ -55,7 +76,12 @@ class JournalTab(QWidget):
         self.setLayout(main_layout)
 
     def open_entry(self, item):
+        if self.is_editing:
+            return
+
         title = item.text()
+        self.current_entry_title = title
+
         content = self.mock_entries.get(title, "")
 
         self.title_input.setText(title)
@@ -64,10 +90,107 @@ class JournalTab(QWidget):
         self.title_input.setReadOnly(True)
         self.content_editor.setReadOnly(True)
 
+        self.title_input.setCursor(Qt.ArrowCursor)
+        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
+
         self.edit_button.setEnabled(True)
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.delete_button.setEnabled(True)
+
+    def enable_editing(self):
+        self.is_editing = True
+
+        self.title_input.setProperty("original_text", self.title_input.text())
+        self.content_editor.setProperty(
+            "original_text", self.content_editor.toPlainText()
+        )
+
+        self.title_input.setReadOnly(False)
+        self.content_editor.setReadOnly(False)
+
+        self.edit_button.setEnabled(False)
+        self.save_button.setEnabled(True)
+        self.cancel_button.setEnabled(True)
+        self.delete_button.setEnabled(False)
+
+        self.title_input.setCursor(Qt.IBeamCursor)
+        self.content_editor.viewport().setCursor(Qt.IBeamCursor)
+
+    def save_entry(self):
+        if self.current_entry_title is None:
+            return
+
+        old_title = self.current_entry_title
+        new_title = self.title_input.text().strip()
+        new_content = self.content_editor.toPlainText()
+
+        if not new_title:
+            return
+
+        self.mock_entries.pop(old_title)
+        self.mock_entries[new_title] = new_content
+        self.current_entry_title = new_title
+
+        matching_items = self.entries_list.findItems(old_title, Qt.MatchExactly)
+
+        if matching_items:
+            matching_items[0].setText(new_title)
+
+        self.title_input.setText(new_title)
+
+        self.is_editing = False
+
+        self.title_input.setReadOnly(True)
+        self.content_editor.setReadOnly(True)
+
+        self.title_input.setCursor(Qt.ArrowCursor)
+        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
+
+        self.edit_button.setEnabled(True)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.delete_button.setEnabled(True)
+
+    def cancel_editing(self):
+        self.is_editing = False
+
+        original_title = self.title_input.property("original_text")
+        original_content = self.content_editor.property("original_text")
+
+        self.title_input.setText(original_title)
+        self.content_editor.setText(original_content)
+
+        self.title_input.setReadOnly(True)
+        self.content_editor.setReadOnly(True)
+
+        self.title_input.setCursor(Qt.ArrowCursor)
+        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
+
+        self.edit_button.setEnabled(True)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.delete_button.setEnabled(True)
+
+    def clear_entry_viewer(self):
+        if self.is_editing:
+            return
+
+        self.current_entry_title = None
+
+        self.title_input.clear()
+        self.content_editor.clear()
+
+        self.title_input.setReadOnly(True)
+        self.content_editor.setReadOnly(True)
+
+        self.title_input.setCursor(Qt.ArrowCursor)
+        self.content_editor.viewport().setCursor(Qt.ArrowCursor)
+
+        self.edit_button.setEnabled(False)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
 
 
 def create_journal_tab():
@@ -112,6 +235,8 @@ def create_entry_viewer_panel():
     content_editor = QTextEdit()
     content_editor.setPlaceholderText("Select an entry to read or edit its content.")
     content_editor.setReadOnly(True)
+    title_input.setCursor(Qt.ArrowCursor)
+    content_editor.viewport().setCursor(Qt.ArrowCursor)
 
     buttons_layout = QHBoxLayout()
     edit_button = QPushButton("Edit")
@@ -123,38 +248,6 @@ def create_entry_viewer_panel():
     save_button.setEnabled(False)
     cancel_button.setEnabled(False)
     delete_button.setEnabled(False)
-
-    def enable_editing():
-        title_input.setProperty("original_text", title_input.text())
-        content_editor.setProperty("original_text", content_editor.toPlainText())
-
-        title_input.setReadOnly(False)
-        content_editor.setReadOnly(False)
-
-        edit_button.setEnabled(False)
-        save_button.setEnabled(True)
-        cancel_button.setEnabled(True)
-        delete_button.setEnabled(False)
-
-    def cancel_editing():
-        original_title = title_input.property("original_text")
-        original_content = content_editor.property("original_text")
-
-        title_input.setText(original_title)
-        content_editor.setText(original_content)
-
-        title_input.setReadOnly(True)
-        content_editor.setReadOnly(True)
-
-        edit_button.setEnabled(True)
-        save_button.setEnabled(False)
-        cancel_button.setEnabled(False)
-        delete_button.setEnabled(True)
-
-    edit_button.clicked.connect(enable_editing)
-    cancel_button.clicked.connect(cancel_editing)
-
-    edit_button.clicked.connect(enable_editing)
 
     buttons_layout.addWidget(edit_button)
     buttons_layout.addWidget(save_button)
