@@ -23,35 +23,58 @@ class ClearableListWidget(QListWidget):
         super().mousePressEvent(event)
 
 
+class JournalTab(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        main_layout = QHBoxLayout()
+
+        (
+            self.entry_viewer_panel,
+            self.title_input,
+            self.content_editor,
+            self.edit_button,
+            self.save_button,
+            self.cancel_button,
+            self.delete_button,
+        ) = create_entry_viewer_panel()
+
+        self.mock_entries = {
+            "2026-07-16 13:20": "Mock journal entry for July 16.",
+            "2026-07-15 22:40": "Mock journal entry for July 15.",
+            "2026-07-14 05:19": "Mock journal entry for July 14.",
+        }
+
+        self.entries_panel, self.entries_list = create_entries_panel(self.mock_entries)
+
+        self.entries_list.itemDoubleClicked.connect(self.open_entry)
+
+        main_layout.addWidget(self.entries_panel, 2)
+        main_layout.addWidget(self.entry_viewer_panel, 3)
+
+        self.setLayout(main_layout)
+
+    def open_entry(self, item):
+        title = item.text()
+        content = self.mock_entries.get(title, "")
+
+        self.title_input.setText(title)
+        self.content_editor.setText(content)
+
+        self.title_input.setReadOnly(True)
+        self.content_editor.setReadOnly(True)
+
+        self.edit_button.setEnabled(True)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.delete_button.setEnabled(True)
+
+
 def create_journal_tab():
-    tab = QWidget()
-    main_layout = QHBoxLayout()
-
-    (
-        entry_viewer_panel,
-        title_input,
-        content_editor,
-        edit_button,
-        save_button,
-        cancel_button,
-        delete_button,
-    ) = create_entry_viewer_panel()
-
-    entries_panel = create_entries_panel(
-        title_input,
-        content_editor,
-        edit_button,
-        delete_button,
-    )
-
-    main_layout.addWidget(entries_panel, 2)
-    main_layout.addWidget(entry_viewer_panel, 3)
-
-    tab.setLayout(main_layout)
-    return tab
+    return JournalTab()
 
 
-def create_entries_panel(title_input, content_editor, edit_button, delete_button):
+def create_entries_panel(mock_entries):
     panel = QWidget()
     layout = QVBoxLayout()
 
@@ -65,35 +88,15 @@ def create_entries_panel(title_input, content_editor, edit_button, delete_button
         color: white;
     }
 """)
-    mock_entries = {
-        "2026-07-16 13:20": "Mock journal entry for July 16.",
-        "2026-07-15 22:40": "Mock journal entry for July 15.",
-        "2026-07-14 05:19": "Mock journal entry for July 14.",
-    }
 
     entries_list.addItems(list(mock_entries.keys()))
-
-    def open_entry(item):
-        title = item.text()
-        content = mock_entries.get(title, "")
-
-        title_input.setText(title)
-        content_editor.setText(content)
-
-        title_input.setReadOnly(True)
-        content_editor.setReadOnly(True)
-
-        edit_button.setEnabled(True)
-        delete_button.setEnabled(True)
-
-    entries_list.itemDoubleClicked.connect(open_entry)
 
     layout.addWidget(title_label)
     layout.addWidget(new_entry_button)
     layout.addWidget(entries_list)
 
     panel.setLayout(layout)
-    return panel
+    return panel, entries_list
 
 
 def create_entry_viewer_panel():
