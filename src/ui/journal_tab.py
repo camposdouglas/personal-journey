@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -10,6 +11,8 @@ from PySide6.QtWidgets import (
 )
 
 from PySide6.QtCore import Qt, Signal
+
+from datetime import datetime
 
 
 class ClearableListWidget(QListWidget):
@@ -42,6 +45,8 @@ class JournalTab(QWidget):
 
         self.current_entry_title = None
         self.is_editing = False
+        self.is_new_entry = False
+        self.pending_new_entry_item = None
 
         main_layout = QHBoxLayout()
 
@@ -61,10 +66,14 @@ class JournalTab(QWidget):
             "2026-07-14 05:19": "Mock journal entry for July 14.",
         }
 
-        self.entries_panel, self.entries_list = create_entries_panel(self.mock_entries)
+        self.entries_panel, self.entries_list, self.new_entry_button = (
+            create_entries_panel(self.mock_entries)
+        )
 
         self.entries_list.itemDoubleClicked.connect(self.open_entry)
         self.entries_list.emptyAreaDoubleClicked.connect(self.clear_entry_viewer)
+
+        self.new_entry_button.clicked.connect(self.create_new_entry)
 
         self.edit_button.clicked.connect(self.enable_editing)
         self.save_button.clicked.connect(self.save_entry)
@@ -128,18 +137,29 @@ class JournalTab(QWidget):
         if not new_title:
             return
 
-        self.mock_entries.pop(old_title)
-        self.mock_entries[new_title] = new_content
-        self.current_entry_title = new_title
+        if self.is_new_entry:
+            self.mock_entries[new_title] = new_content
+            self.current_entry_title = new_title
 
-        matching_items = self.entries_list.findItems(old_title, Qt.MatchExactly)
+            if self.pending_new_entry_item is not None:
+                self.pending_new_entry_item.setText(new_title)
 
-        if matching_items:
-            matching_items[0].setText(new_title)
+            self.pending_new_entry_item = None
+            self.is_new_entry = False
 
-        self.title_input.setText(new_title)
+        else:
+            self.mock_entries.pop(old_title)
+            self.mock_entries[new_title] = new_content
+            self.current_entry_title = new_title
+
+            matching_items = self.entries_list.findItems(old_title, Qt.MatchExactly)
+
+            if matching_items:
+                matching_items[0].setText(new_title)
 
         self.is_editing = False
+
+        self.title_input.setText(new_title)
 
         self.title_input.setReadOnly(True)
         self.content_editor.setReadOnly(True)
@@ -153,6 +173,20 @@ class JournalTab(QWidget):
         self.delete_button.setEnabled(True)
 
     def cancel_editing(self):
+        if self.is_new_entry:
+            if self.pending_new_entry_item is not None:
+                row = self.entries_list.row(self.pending_new_entry_item)
+
+                if row != -1:
+                    self.entries_list.takeItem(row)
+
+            self.pending_new_entry_item = None
+            self.is_new_entry = False
+            self.is_editing = False
+
+            self.clear_entry_viewer()
+            return
+
         self.is_editing = False
 
         original_title = self.title_input.property("original_text")
@@ -192,6 +226,39 @@ class JournalTab(QWidget):
         self.cancel_button.setEnabled(False)
         self.delete_button.setEnabled(False)
 
+    def create_new_entry(self):
+        if self.is_editing:
+            return
+
+        temporary_title = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
+
+        new_item = QListWidgetItem(temporary_title)
+        self.pending_new_entry_item = new_item
+
+        self.entries_list.insertItem(0, new_item)
+        self.entries_list.setCurrentItem(new_item)
+        self.entries_list.scrollToItem(new_item)
+
+        self.current_entry_title = temporary_title
+        self.is_new_entry = True
+        self.is_editing = True
+
+        self.title_input.setText(temporary_title)
+        self.content_editor.clear()
+
+        self.title_input.setReadOnly(False)
+        self.content_editor.setReadOnly(False)
+
+        self.title_input.setCursor(Qt.IBeamCursor)
+        self.content_editor.viewport().setCursor(Qt.IBeamCursor)
+
+        self.edit_button.setEnabled(False)
+        self.save_button.setEnabled(True)
+        self.cancel_button.setEnabled(True)
+        self.delete_button.setEnabled(False)
+
+        self.content_editor.setFocus()
+
 
 def create_journal_tab():
     return JournalTab()
@@ -219,7 +286,7 @@ def create_entries_panel(mock_entries):
     layout.addWidget(entries_list)
 
     panel.setLayout(layout)
-    return panel, entries_list
+    return panel, entries_list, new_entry_button
 
 
 def create_entry_viewer_panel():
