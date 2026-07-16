@@ -33,6 +33,7 @@ def create_journal_tab():
         content_editor,
         edit_button,
         save_button,
+        cancel_button,
         delete_button,
     ) = create_entry_viewer_panel()
 
@@ -112,14 +113,49 @@ def create_entry_viewer_panel():
     buttons_layout = QHBoxLayout()
     edit_button = QPushButton("Edit")
     save_button = QPushButton("Save")
+    cancel_button = QPushButton("Cancel")
     delete_button = QPushButton("Delete")
 
     edit_button.setEnabled(False)
     save_button.setEnabled(False)
+    cancel_button.setEnabled(False)
     delete_button.setEnabled(False)
+
+    def enable_editing():
+        title_input.setProperty("original_text", title_input.text())
+        content_editor.setProperty("original_text", content_editor.toPlainText())
+
+        title_input.setReadOnly(False)
+        content_editor.setReadOnly(False)
+
+        edit_button.setEnabled(False)
+        save_button.setEnabled(True)
+        cancel_button.setEnabled(True)
+        delete_button.setEnabled(False)
+
+    def cancel_editing():
+        original_title = title_input.property("original_text")
+        original_content = content_editor.property("original_text")
+
+        title_input.setText(original_title)
+        content_editor.setText(original_content)
+
+        title_input.setReadOnly(True)
+        content_editor.setReadOnly(True)
+
+        edit_button.setEnabled(True)
+        save_button.setEnabled(False)
+        cancel_button.setEnabled(False)
+        delete_button.setEnabled(True)
+
+    edit_button.clicked.connect(enable_editing)
+    cancel_button.clicked.connect(cancel_editing)
+
+    edit_button.clicked.connect(enable_editing)
 
     buttons_layout.addWidget(edit_button)
     buttons_layout.addWidget(save_button)
+    buttons_layout.addWidget(cancel_button)
     buttons_layout.addWidget(delete_button)
 
     layout.addWidget(title_label)
@@ -129,4 +165,12 @@ def create_entry_viewer_panel():
     layout.addLayout(buttons_layout)
 
     panel.setLayout(layout)
-    return panel, title_input, content_editor, edit_button, save_button, delete_button
+    return (
+        panel,
+        title_input,
+        content_editor,
+        edit_button,
+        save_button,
+        cancel_button,
+        delete_button,
+    )
