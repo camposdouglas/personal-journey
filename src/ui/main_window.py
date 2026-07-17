@@ -1,22 +1,45 @@
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtGui import QGuiApplication
 
 from ui.journal_tab import create_journal_tab
 from ui.tracker_tab import create_tracker_tab
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Personal Journey")
-        self.resize(900, 600)
+        self.resize(1000, 650)
 
         tabs = QTabWidget()
+        tabs.addTab(create_journal_tab(), "Journal")
+        tabs.addTab(create_tracker_tab(), "Tracker")
 
-        journal_tab = create_journal_tab()
-        tracker_tab = create_tracker_tab()
+        layout = QVBoxLayout()
+        layout.addWidget(tabs)
 
-        tabs.addTab(journal_tab, "Journal")
-        tabs.addTab(tracker_tab, "Tracker")
+        self.setLayout(layout)
 
-        self.setCentralWidget(tabs)
+    def center_on_screen(self):
+        screen = self.screen()
+
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+
+        if screen is None:
+            return
+
+        screen_geometry = screen.availableGeometry()
+        window_geometry = self.frameGeometry()
+
+        x = (
+            screen_geometry.x()
+            + (screen_geometry.width() - window_geometry.width()) // 2
+        )
+        y = (
+            screen_geometry.y()
+            + (screen_geometry.height() - window_geometry.height()) // 2
+        )
+
+        self.move(x, y)
