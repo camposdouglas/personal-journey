@@ -1,3 +1,7 @@
+from datetime import datetime
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -10,10 +14,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from PySide6.QtCore import Qt, Signal
-
-from datetime import datetime
 
 
 class ClearableListWidget(QListWidget):
@@ -44,7 +44,8 @@ class JournalTab(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.current_entry_title = None
+        self.current_entry_id = None
+        self.next_entry_id = 1
         self.is_editing = False
         self.is_new_entry = False
         self.pending_new_entry_item = None
@@ -54,6 +55,7 @@ class JournalTab(QWidget):
         (
             self.entry_viewer_panel,
             self.title_input,
+            self.title_error_label,
             self.content_editor,
             self.edit_button,
             self.save_button,
@@ -61,11 +63,7 @@ class JournalTab(QWidget):
             self.delete_button,
         ) = create_entry_viewer_panel()
 
-        self.mock_entries = {
-            "2026-07-16 13:20": "Mock journal entry for July 16.",
-            "2026-07-15 22:40": "Mock journal entry for July 15.",
-            "2026-07-14 05:19": "Mock journal entry for July 14.",
-        }
+        self.mock_entries = {}
 
         self.entries_panel, self.entries_list, self.new_entry_button = (
             create_entries_panel(self.mock_entries)
@@ -90,56 +88,75 @@ class JournalTab(QWidget):
         if self.is_editing:
             return
 
-        title = item.text()
-        self.current_entry_title = title
+        entry_id = item.data(Qt.UserRole)
+        entry_data = self.mock_entries.get(entry_id)
 
-        content = self.mock_entries.get(title, "")
+        if entry_data is None:
+            self.current_entry_id = None
+            return
 
-        self.title_input.setText(title)
-        self.content_editor.setText(content)
+        self.current_entry_id = entry_id
+
+        self.title_input.setText(entry_data["title"])
+        self.content_editor.setText(entry_data["content"])
 
         self.enter_read_mode()
 
+    def find_entry_item_by_id(self, entry_id):
+        for row in range(self.entries_list.count()):
+            item = self.entries_list.item(row)
+
+            if item.data(Qt.UserRole) == entry_id:
+                return item
+
+        return None
+
     def enable_editing(self):
+        self.clear_title_error()
+
         self.title_input.setProperty("original_text", self.title_input.text())
         self.content_editor.setProperty(
             "original_text", self.content_editor.toPlainText()
         )
 
         self.enter_edit_mode()
+        self.content_editor.setFocus()
+        self.content_editor.moveCursor(QTextCursor.End)
 
     def save_entry(self):
-        if self.current_entry_title is None:
+        if self.current_entry_id is None:
             return
 
-        old_title = self.current_entry_title
+        entry_id = self.current_entry_id
         new_title = self.title_input.text().strip()
         new_content = self.content_editor.toPlainText()
 
         if not new_title:
+            self.mark_title_invalid()
             return
 
-        if self.is_new_entry:
-            self.mock_entries[new_title] = new_content
-            self.current_entry_title = new_title
+        self.clear_title_error()
 
+        self.mock_entries[entry_id] = {
+            "title": new_title,
+            "content": new_content,
+        }
+
+        if self.is_new_entry:
             if self.pending_new_entry_item is not None:
                 self.pending_new_entry_item.setText(new_title)
+                self.pending_new_entry_item.setData(Qt.UserRole, entry_id)
 
             self.pending_new_entry_item = None
             self.is_new_entry = False
 
         else:
-            self.mock_entries.pop(old_title)
-            self.mock_entries[new_title] = new_content
-            self.current_entry_title = new_title
+            item = self.find_entry_item_by_id(entry_id)
 
-            matching_items = self.entries_list.findItems(old_title, Qt.MatchExactly)
+            if item is not None:
+                item.setText(new_title)
 
-            if matching_items:
-                matching_items[0].setText(new_title)
-
-        self.is_editing = False
+        self.title_input.setText(new_title)
 
         self.enter_read_mode()
 
@@ -155,10 +172,12 @@ class JournalTab(QWidget):
             self.is_new_entry = False
             self.is_editing = False
 
+            self.clear_title_error()
             self.clear_entry_viewer()
             return
 
         self.is_editing = False
+        self.clear_title_error()
 
         original_title = self.title_input.property("original_text")
         original_content = self.content_editor.property("original_text")
@@ -169,13 +188,19 @@ class JournalTab(QWidget):
         self.enter_read_mode()
 
     def delete_entry(self):
-        if self.current_entry_title is None:
+        if self.current_entry_id is None:
             return
 
         if self.is_editing:
             return
 
-        title_to_delete = self.current_entry_title
+        entry_id = self.current_entry_id
+        entry_data = self.mock_entries.get(entry_id)
+
+        if entry_data is None:
+            return
+
+        title_to_delete = entry_data["title"]
 
         confirmation_box = QMessageBox(self)
         confirmation_box.setWindowTitle("Delete Entry")
@@ -192,15 +217,13 @@ class JournalTab(QWidget):
         if confirmation_box.clickedButton() != yes_button:
             return
 
-        self.mock_entries.pop(title_to_delete, None)
+        self.mock_entries.pop(entry_id, None)
 
-        matching_items = self.entries_list.findItems(title_to_delete, Qt.MatchExactly)
+        item = self.find_entry_item_by_id(entry_id)
 
-        if matching_items:
-            row = self.entries_list.row(matching_items[0])
-
-            if row != -1:
-                self.entries_list.takeItem(row)
+        if item is not None:
+            row = self.entries_list.row(item)
+            self.entries_list.takeItem(row)
 
         self.clear_entry_viewer()
 
@@ -208,7 +231,7 @@ class JournalTab(QWidget):
         if self.is_editing:
             return
 
-        self.current_entry_title = None
+        self.current_entry_id = None
 
         self.title_input.clear()
         self.content_editor.clear()
@@ -219,6 +242,7 @@ class JournalTab(QWidget):
         self.is_editing = False
 
         self.title_input.setReadOnly(True)
+        self.title_input.setFocusPolicy(Qt.NoFocus)
         self.content_editor.setReadOnly(True)
 
         self.title_input.setCursor(Qt.ArrowCursor)
@@ -233,6 +257,7 @@ class JournalTab(QWidget):
         self.is_editing = True
 
         self.title_input.setReadOnly(False)
+        self.title_input.setFocusPolicy(Qt.StrongFocus)
         self.content_editor.setReadOnly(False)
 
         self.title_input.setCursor(Qt.IBeamCursor)
@@ -247,6 +272,7 @@ class JournalTab(QWidget):
         self.is_editing = False
 
         self.title_input.setReadOnly(True)
+        self.title_input.setFocusPolicy(Qt.NoFocus)
         self.content_editor.setReadOnly(True)
 
         self.title_input.setCursor(Qt.ArrowCursor)
@@ -261,16 +287,23 @@ class JournalTab(QWidget):
         if self.is_editing:
             return
 
+        self.clear_title_error()
+
+        entry_id = self.next_entry_id
+        self.next_entry_id += 1
+
         temporary_title = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
 
         new_item = QListWidgetItem(temporary_title)
+        new_item.setData(Qt.UserRole, entry_id)
+
         self.pending_new_entry_item = new_item
 
         self.entries_list.insertItem(0, new_item)
         self.entries_list.setCurrentItem(new_item)
         self.entries_list.scrollToItem(new_item)
 
-        self.current_entry_title = temporary_title
+        self.current_entry_id = entry_id
         self.is_new_entry = True
 
         self.title_input.setText(temporary_title)
@@ -278,6 +311,14 @@ class JournalTab(QWidget):
 
         self.enter_edit_mode()
         self.content_editor.setFocus()
+
+    def mark_title_invalid(self):
+        self.title_error_label.setVisible(True)
+        self.title_input.setToolTip("Title cannot be empty.")
+
+    def clear_title_error(self):
+        self.title_error_label.setVisible(False)
+        self.title_input.setToolTip("")
 
 
 def create_journal_tab():
@@ -299,7 +340,10 @@ def create_entries_panel(mock_entries):
     }
 """)
 
-    entries_list.addItems(list(mock_entries.keys()))
+    for entry_id, entry_data in mock_entries.items():
+        item = QListWidgetItem(entry_data["title"])
+        item.setData(Qt.UserRole, entry_id)
+        entries_list.addItem(item)
 
     layout.addWidget(title_label)
     layout.addWidget(new_entry_button)
@@ -313,10 +357,22 @@ def create_entry_viewer_panel():
     panel = QWidget()
     layout = QVBoxLayout()
 
+    title_header_layout = QHBoxLayout()
+
     title_label = QLabel("Title")
+
+    title_error_label = QLabel("Title cannot be empty.")
+    title_error_label.setStyleSheet("color: #cc3333;")
+    title_error_label.setVisible(False)
+
+    title_header_layout.addWidget(title_label)
+    title_header_layout.addStretch()
+    title_header_layout.addWidget(title_error_label)
+
     title_input = QLineEdit()
     title_input.setPlaceholderText("Select an entry")
     title_input.setReadOnly(True)
+    title_input.setFocusPolicy(Qt.NoFocus)
 
     content_label = QLabel("Content")
     content_editor = QTextEdit()
@@ -341,7 +397,7 @@ def create_entry_viewer_panel():
     buttons_layout.addWidget(cancel_button)
     buttons_layout.addWidget(delete_button)
 
-    layout.addWidget(title_label)
+    layout.addLayout(title_header_layout)
     layout.addWidget(title_input)
     layout.addWidget(content_label)
     layout.addWidget(content_editor)
@@ -351,6 +407,7 @@ def create_entry_viewer_panel():
     return (
         panel,
         title_input,
+        title_error_label,
         content_editor,
         edit_button,
         save_button,
