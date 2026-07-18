@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# SQLite database files — never commit local data
+*.db
+
 # Private, machine-local agent context — never commit
 AGENTS.local.md
 .cursor/rules/personal-context.mdc
