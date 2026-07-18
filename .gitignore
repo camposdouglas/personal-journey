@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Private, machine-local agent context — never commit
+AGENTS.local.md
+.cursor/rules/personal-context.mdc
