@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import journal_repository as repo
+
 
 class ClearableListWidget(QListWidget):
     emptyAreaDoubleClicked = Signal()
@@ -45,7 +47,6 @@ class JournalTab(QWidget):
         super().__init__()
 
         self.current_entry_id = None
-        self.next_entry_id = 1
         self.is_editing = False
         self.is_new_entry = False
         self.pending_new_entry_item = None
@@ -63,10 +64,8 @@ class JournalTab(QWidget):
             self.delete_button,
         ) = create_entry_viewer_panel()
 
-        self.mock_entries = {}
-
         self.entries_panel, self.entries_list, self.new_entry_button = (
-            create_entries_panel(self.mock_entries)
+            create_entries_panel(repo.list_entries())
         )
 
         self.entries_list.itemDoubleClicked.connect(self.open_entry)
@@ -89,7 +88,7 @@ class JournalTab(QWidget):
             return
 
         entry_id = item.data(Qt.UserRole)
-        entry_data = self.mock_entries.get(entry_id)
+        entry_data = repo.get_entry(entry_id)
 
         if entry_data is None:
             self.current_entry_id = None
@@ -124,10 +123,9 @@ class JournalTab(QWidget):
         self.content_editor.moveCursor(QTextCursor.End)
 
     def save_entry(self):
-        if self.current_entry_id is None:
+        if not self.is_editing:
             return
 
-        entry_id = self.current_entry_id
         new_title = self.title_input.text().strip()
         new_content = self.content_editor.toPlainText()
 
@@ -137,21 +135,24 @@ class JournalTab(QWidget):
 
         self.clear_title_error()
 
-        self.mock_entries[entry_id] = {
-            "title": new_title,
-            "content": new_content,
-        }
-
         if self.is_new_entry:
+            entry = repo.create_entry(new_title, new_content)
+            self.current_entry_id = entry["id"]
+
             if self.pending_new_entry_item is not None:
                 self.pending_new_entry_item.setText(new_title)
-                self.pending_new_entry_item.setData(Qt.UserRole, entry_id)
+                self.pending_new_entry_item.setData(Qt.UserRole, entry["id"])
 
             self.pending_new_entry_item = None
             self.is_new_entry = False
 
         else:
-            item = self.find_entry_item_by_id(entry_id)
+            if self.current_entry_id is None:
+                return
+
+            repo.update_entry(self.current_entry_id, new_title, new_content)
+
+            item = self.find_entry_item_by_id(self.current_entry_id)
 
             if item is not None:
                 item.setText(new_title)
@@ -195,7 +196,7 @@ class JournalTab(QWidget):
             return
 
         entry_id = self.current_entry_id
-        entry_data = self.mock_entries.get(entry_id)
+        entry_data = repo.get_entry(entry_id)
 
         if entry_data is None:
             return
@@ -217,7 +218,7 @@ class JournalTab(QWidget):
         if confirmation_box.clickedButton() != yes_button:
             return
 
-        self.mock_entries.pop(entry_id, None)
+        repo.delete_entry(entry_id)
 
         item = self.find_entry_item_by_id(entry_id)
 
@@ -289,13 +290,10 @@ class JournalTab(QWidget):
 
         self.clear_title_error()
 
-        entry_id = self.next_entry_id
-        self.next_entry_id += 1
-
         temporary_title = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
 
         new_item = QListWidgetItem(temporary_title)
-        new_item.setData(Qt.UserRole, entry_id)
+        new_item.setData(Qt.UserRole, None)
 
         self.pending_new_entry_item = new_item
 
@@ -303,7 +301,7 @@ class JournalTab(QWidget):
         self.entries_list.setCurrentItem(new_item)
         self.entries_list.scrollToItem(new_item)
 
-        self.current_entry_id = entry_id
+        self.current_entry_id = None
         self.is_new_entry = True
 
         self.title_input.setText(temporary_title)
@@ -325,7 +323,7 @@ def create_journal_tab():
     return JournalTab()
 
 
-def create_entries_panel(mock_entries):
+def create_entries_panel(entries):
     panel = QWidget()
     layout = QVBoxLayout()
 
@@ -340,9 +338,9 @@ def create_entries_panel(mock_entries):
     }
 """)
 
-    for entry_id, entry_data in mock_entries.items():
-        item = QListWidgetItem(entry_data["title"])
-        item.setData(Qt.UserRole, entry_id)
+    for entry in entries:
+        item = QListWidgetItem(entry["title"])
+        item.setData(Qt.UserRole, entry["id"])
         entries_list.addItem(item)
 
     layout.addWidget(title_label)
