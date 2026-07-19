@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -455,7 +455,8 @@ class TrackerTab(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.selected_week_start = get_week_start(date.today())
+        self.last_known_date = date.today()
+        self.selected_week_start = get_week_start(self.last_known_date)
 
         layout = QVBoxLayout()
 
@@ -503,6 +504,11 @@ class TrackerTab(QWidget):
         layout.addWidget(self.tracker_tabs)
         self.setLayout(layout)
 
+        self.date_refresh_timer = QTimer(self)
+        self.date_refresh_timer.setInterval(60_000)
+        self.date_refresh_timer.timeout.connect(self.check_for_date_change)
+        self.date_refresh_timer.start()
+
     def add_tracker_tab(self, tracker, index=None):
         read_only = self.selected_week_start != get_week_start(date.today())
         page = TrackerPage(
@@ -529,16 +535,13 @@ class TrackerTab(QWidget):
         return index
 
     def change_week(self, direction):
-        for index in range(1, self.add_tracker_tab_index):
-            page = self.tracker_tabs.widget(index)
-
-            if isinstance(page, TrackerPage) and page.is_editing:
-                QMessageBox.information(
-                    self,
-                    "Finish Editing",
-                    "Save or cancel the current tracker edit before changing weeks.",
-                )
-                return
+        if self.has_active_tracker_edit():
+            QMessageBox.information(
+                self,
+                "Finish Editing",
+                "Save or cancel the current tracker edit before changing weeks.",
+            )
+            return
 
         new_week_start = self.selected_week_start + timedelta(
             days=direction * 7
@@ -550,6 +553,38 @@ class TrackerTab(QWidget):
 
         self.selected_week_start = new_week_start
         self.rebuild_week_tabs()
+
+    def has_active_tracker_edit(self):
+        for index in range(1, self.add_tracker_tab_index):
+            page = self.tracker_tabs.widget(index)
+
+            if isinstance(page, TrackerPage) and page.is_editing:
+                return True
+
+        return False
+
+    def check_for_date_change(self):
+        current_date = date.today()
+
+        if current_date == self.last_known_date:
+            return
+
+        if self.has_active_tracker_edit():
+            return
+
+        previous_current_week = get_week_start(self.last_known_date)
+        was_viewing_current_week = (
+            self.selected_week_start == previous_current_week
+        )
+
+        self.last_known_date = current_date
+
+        if was_viewing_current_week:
+            self.selected_week_start = get_week_start(current_date)
+            self.rebuild_week_tabs()
+            return
+
+        self.update_week_navigation()
 
     def rebuild_week_tabs(self):
         self.tracker_tabs.setCurrentIndex(0)
