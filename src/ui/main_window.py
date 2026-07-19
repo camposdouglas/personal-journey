@@ -25,9 +25,9 @@ class MainWindow(QWidget):
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
         tabs.tabBar().setExpanding(True)
+        tabs.addTab(self.routine_tab, "Routine")
         tabs.addTab(self.tracker_tab, "Tracker")
         tabs.addTab(self.journal_tab, "Journal")
-        tabs.addTab(self.routine_tab, "Routine")
 
         layout = QVBoxLayout()
         layout.addWidget(tabs)
