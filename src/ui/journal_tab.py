@@ -19,27 +19,24 @@ import journal_repository as repo
 
 
 class ClearableListWidget(QListWidget):
-    emptyAreaDoubleClicked = Signal()
+    emptyAreaClicked = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.interaction_locked = False
 
     def mousePressEvent(self, event):
-        clicked_item = self.itemAt(event.position().toPoint())
-
-        if clicked_item is None:
-            self.clearSelection()
-            self.setCurrentRow(-1)
-
-        super().mousePressEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        clicked_item = self.itemAt(event.position().toPoint())
-
-        if clicked_item is None:
-            self.clearSelection()
-            self.setCurrentRow(-1)
-            self.emptyAreaDoubleClicked.emit()
+        if self.interaction_locked:
             return
 
-        super().mouseDoubleClickEvent(event)
+        clicked_item = self.itemAt(event.position().toPoint())
+
+        if clicked_item is None:
+            self.clearSelection()
+            self.setCurrentRow(-1)
+            self.emptyAreaClicked.emit()
+
+        super().mousePressEvent(event)
 
 
 class JournalTab(QWidget):
@@ -69,8 +66,8 @@ class JournalTab(QWidget):
             create_entries_panel(repo.list_entries())
         )
 
-        self.entries_list.itemDoubleClicked.connect(self.open_entry)
-        self.entries_list.emptyAreaDoubleClicked.connect(self.clear_entry_viewer)
+        self.entries_list.itemClicked.connect(self.open_entry)
+        self.entries_list.emptyAreaClicked.connect(self.clear_entry_viewer)
 
         self.new_entry_button.clicked.connect(self.create_new_entry)
 
@@ -247,6 +244,7 @@ class JournalTab(QWidget):
 
     def enter_read_mode(self):
         self.is_editing = False
+        self.entries_list.interaction_locked = False
 
         self.title_input.setReadOnly(True)
         self.title_input.setFocusPolicy(Qt.NoFocus)
@@ -262,6 +260,7 @@ class JournalTab(QWidget):
 
     def enter_edit_mode(self):
         self.is_editing = True
+        self.entries_list.interaction_locked = True
 
         self.title_input.setReadOnly(False)
         self.title_input.setFocusPolicy(Qt.StrongFocus)
@@ -277,6 +276,7 @@ class JournalTab(QWidget):
 
     def enter_empty_mode(self):
         self.is_editing = False
+        self.entries_list.interaction_locked = False
 
         self.title_input.setReadOnly(True)
         self.title_input.setFocusPolicy(Qt.NoFocus)
