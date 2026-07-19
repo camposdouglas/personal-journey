@@ -8,6 +8,21 @@ def _now():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _tracker_belongs_to_week(tracker, week_start):
+    created_date = datetime.fromisoformat(tracker["created_at"]).date()
+    created_week = get_week_start(created_date)
+
+    if week_start < created_week:
+        return False
+
+    if tracker["archived_at"] is None:
+        return True
+
+    archived_date = datetime.fromisoformat(tracker["archived_at"]).date()
+    archived_week = get_week_start(archived_date)
+    return week_start < archived_week
+
+
 def create_tracker(name, weekly_target):
     cleaned_name = name.strip()
 
@@ -97,20 +112,8 @@ def list_week_progress(week_start):
         ).fetchall()
 
         for tracker in trackers:
-            created_date = datetime.fromisoformat(tracker["created_at"]).date()
-            created_week = get_week_start(created_date)
-
-            if week_start < created_week:
+            if not _tracker_belongs_to_week(tracker, week_start):
                 continue
-
-            if tracker["archived_at"] is not None:
-                archived_date = datetime.fromisoformat(
-                    tracker["archived_at"]
-                ).date()
-                archived_week = get_week_start(archived_date)
-
-                if week_start >= archived_week:
-                    continue
 
             target_row = connection.execute(
                 """
@@ -151,6 +154,51 @@ def list_week_progress(week_start):
             )
 
     return progress
+
+
+def list_trackers_for_week(week_start):
+    week_start = get_week_start(week_start)
+    trackers_for_week = []
+
+    with get_connection() as connection:
+        trackers = connection.execute(
+            """
+            SELECT id, name, description, created_at, archived_at
+            FROM trackers
+            ORDER BY created_at, id
+            """
+        ).fetchall()
+
+        for tracker in trackers:
+            if not _tracker_belongs_to_week(tracker, week_start):
+                continue
+
+            target_row = connection.execute(
+                """
+                SELECT weekly_target
+                FROM tracker_weekly_targets
+                WHERE tracker_id = ? AND week_start <= ?
+                ORDER BY week_start DESC
+                LIMIT 1
+                """,
+                (tracker["id"], week_start.isoformat()),
+            ).fetchone()
+
+            if target_row is None:
+                continue
+
+            trackers_for_week.append(
+                {
+                    "id": tracker["id"],
+                    "name": tracker["name"],
+                    "description": tracker["description"],
+                    "weekly_target": target_row["weekly_target"],
+                    "created_at": tracker["created_at"],
+                    "archived_at": tracker["archived_at"],
+                }
+            )
+
+    return trackers_for_week
 
 
 def update_tracker(tracker_id, name, description, weekly_target):
