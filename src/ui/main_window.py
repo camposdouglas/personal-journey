@@ -1,7 +1,13 @@
-from PySide6.QtWidgets import QMessageBox, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QMessageBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 from PySide6.QtGui import QGuiApplication
 
 from ui.journal_tab import create_journal_tab
+from ui.routine_tab import create_routine_tab
 from ui.tracker_tab import create_tracker_tab
 
 
@@ -14,10 +20,14 @@ class MainWindow(QWidget):
 
         self.tracker_tab = create_tracker_tab()
         self.journal_tab = create_journal_tab()
+        self.routine_tab = create_routine_tab()
 
         tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        tabs.tabBar().setExpanding(True)
         tabs.addTab(self.tracker_tab, "Tracker")
         tabs.addTab(self.journal_tab, "Journal")
+        tabs.addTab(self.routine_tab, "Routine")
 
         layout = QVBoxLayout()
         layout.addWidget(tabs)
