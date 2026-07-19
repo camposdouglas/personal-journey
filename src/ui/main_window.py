@@ -38,6 +38,7 @@ class MainWindow(QWidget):
         has_unsaved_changes = (
             self.journal_tab.is_editing
             or self.tracker_tab.has_active_tracker_edit()
+            or self.routine_tab.has_active_edit()
         )
 
         if not has_unsaved_changes:

@@ -347,6 +347,12 @@ class RoutineTab(QWidget):
         layout.addWidget(self.schedule_tabs)
         self.setLayout(layout)
 
+    def has_active_edit(self):
+        return (
+            self.weekdays_page.editing_block_id is not None
+            or self.weekends_page.editing_block_id is not None
+        )
+
 
 def create_routine_tab():
     return RoutineTab()
