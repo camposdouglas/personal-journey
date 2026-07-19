@@ -128,6 +128,7 @@ class RoutineSchedulePage(QWidget):
     def refresh_tasks(self):
         self.tasks_list.clear()
         blocks = repo.list_blocks(self.schedule_type)
+        self.clock.set_blocks(blocks)
 
         for block in blocks:
             start_time = format_minutes(block["start_minute"])
