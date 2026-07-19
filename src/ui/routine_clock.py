@@ -50,7 +50,7 @@ class RoutineClock(QWidget):
         painter.drawEllipse(clock_rect)
 
         label_font = QFont(painter.font())
-        label_font.setPointSize(9)
+        label_font.setPointSize(11)
         label_font.setWeight(QFont.Weight.Black)
         painter.setFont(label_font)
 
