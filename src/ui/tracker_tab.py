@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTabWidget,
     QTextEdit,
@@ -127,6 +128,7 @@ class CreateTrackerDialog(QDialog):
 
 class TrackerPage(QWidget):
     trackerUpdated = Signal(dict)
+    trackerArchived = Signal()
 
     def __init__(self, tracker):
         super().__init__()
@@ -222,10 +224,12 @@ class TrackerPage(QWidget):
         buttons_layout.addStretch()
 
         self.edit_button = QPushButton("Edit")
+        self.delete_button = QPushButton("Delete")
         self.save_button = QPushButton("Save")
         self.cancel_button = QPushButton("Cancel")
 
         self.edit_button.clicked.connect(self.enter_edit_mode)
+        self.delete_button.clicked.connect(self.delete_tracker)
         self.save_button.clicked.connect(self.save_changes)
         self.cancel_button.clicked.connect(self.cancel_editing)
         self.name_input.textChanged.connect(self.update_save_button)
@@ -233,6 +237,7 @@ class TrackerPage(QWidget):
         buttons_layout.addWidget(self.edit_button)
         buttons_layout.addWidget(self.cancel_button)
         buttons_layout.addWidget(self.save_button)
+        buttons_layout.addWidget(self.delete_button)
         buttons_layout.addStretch()
 
         layout.addStretch()
@@ -279,6 +284,7 @@ class TrackerPage(QWidget):
         self.description_input.setVisible(False)
 
         self.edit_button.setEnabled(True)
+        self.delete_button.setEnabled(True)
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
 
@@ -302,6 +308,7 @@ class TrackerPage(QWidget):
         self.description_input.setVisible(True)
 
         self.edit_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
         self.update_save_button(self.name_input.text())
         self.cancel_button.setEnabled(True)
 
@@ -329,6 +336,22 @@ class TrackerPage(QWidget):
 
     def cancel_editing(self):
         self.enter_read_mode()
+
+    def delete_tracker(self):
+        answer = QMessageBox.question(
+            self,
+            "Delete Tracker",
+            f"Delete '{self.tracker['name']}' from the current week?\n\n"
+            "Completed-week history will be preserved.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        repo.archive_tracker(self.tracker["id"])
+        self.trackerArchived.emit()
 
     def update_save_button(self, name):
         self.save_button.setEnabled(self.is_editing and bool(name.strip()))
@@ -385,6 +408,9 @@ class TrackerTab(QWidget):
                 tracker_page, updated_tracker
             )
         )
+        page.trackerArchived.connect(
+            lambda tracker_page=page: self.remove_tracker_tab(tracker_page)
+        )
 
         if index is None:
             index = self.tracker_tabs.addTab(page, tracker["name"])
@@ -399,6 +425,19 @@ class TrackerTab(QWidget):
 
         if index != -1:
             self.tracker_tabs.setTabText(index, tracker["name"])
+
+    def remove_tracker_tab(self, page):
+        index = self.tracker_tabs.indexOf(page)
+
+        if index == -1:
+            return
+
+        self.tracker_tabs.setCurrentIndex(0)
+        self.tracker_tabs.removeTab(index)
+        page.deleteLater()
+
+        self.add_tracker_tab_index -= 1
+        self.update_overall_empty_state()
 
     def update_overall_empty_state(self):
         has_trackers = self.tracker_tabs.count() > 2
