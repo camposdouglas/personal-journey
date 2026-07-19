@@ -99,7 +99,7 @@ class RoutineSchedulePage(QWidget):
         tasks_label.setStyleSheet("font-weight: bold;")
 
         self.tasks_list = RoutineBlockList()
-        self.tasks_list.currentItemChanged.connect(self.show_selected_block)
+        self.tasks_list.itemSelectionChanged.connect(self.show_selected_block)
         self.empty_label = QLabel("No routine blocks yet.")
 
         layout.addLayout(form_layout)
@@ -122,7 +122,7 @@ class RoutineSchedulePage(QWidget):
 
         self.update_form_state()
 
-    def show_selected_block(self, current_item, previous_item):
+    def show_selected_block(self):
         if self.editing_block_id is not None:
             return
 
@@ -317,8 +317,12 @@ class RoutineSchedulePage(QWidget):
         return -1
 
     def current_block_id(self):
-        item = self.tasks_list.currentItem()
-        return item.data(Qt.UserRole) if item is not None else None
+        selected_items = self.tasks_list.selectedItems()
+
+        if not selected_items:
+            return None
+
+        return selected_items[0].data(Qt.UserRole)
 
 
 class RoutineTab(QWidget):
