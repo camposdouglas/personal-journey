@@ -32,11 +32,25 @@ def init_db():
             CREATE TABLE IF NOT EXISTS trackers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+                description TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 archived_at TEXT
             )
             """
         )
+
+        tracker_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(trackers)").fetchall()
+        }
+
+        if "description" not in tracker_columns:
+            connection.execute(
+                """
+                ALTER TABLE trackers
+                ADD COLUMN description TEXT NOT NULL DEFAULT ''
+                """
+            )
 
         connection.execute(
             """
