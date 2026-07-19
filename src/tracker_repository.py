@@ -46,6 +46,7 @@ def create_tracker(name, weekly_target):
     return {
         "id": tracker_id,
         "name": cleaned_name,
+        "description": "",
         "weekly_target": weekly_target,
         "created_at": timestamp,
     }
@@ -60,6 +61,7 @@ def list_active_trackers():
             SELECT
                 trackers.id,
                 trackers.name,
+                trackers.description,
                 tracker_weekly_targets.weekly_target,
                 trackers.created_at
             FROM trackers
@@ -78,6 +80,65 @@ def list_active_trackers():
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def update_tracker(tracker_id, name, description, weekly_target):
+    cleaned_name = name.strip()
+    cleaned_description = description.strip()
+
+    if not cleaned_name:
+        raise ValueError("Tracker name cannot be empty.")
+
+    if not isinstance(weekly_target, int) or not 1 <= weekly_target <= 7:
+        raise ValueError("Weekly target must be between 1 and 7.")
+
+    timestamp = _now()
+    current_week_start = get_week_start(date.today()).isoformat()
+
+    with get_connection() as connection:
+        tracker_row = connection.execute(
+            """
+            SELECT created_at
+            FROM trackers
+            WHERE id = ? AND archived_at IS NULL
+            """,
+            (tracker_id,),
+        ).fetchone()
+
+        if tracker_row is None:
+            raise ValueError("Active tracker not found.")
+
+        connection.execute(
+            """
+            UPDATE trackers
+            SET name = ?, description = ?
+            WHERE id = ?
+            """,
+            (cleaned_name, cleaned_description, tracker_id),
+        )
+
+        connection.execute(
+            """
+            INSERT INTO tracker_weekly_targets (
+                tracker_id,
+                week_start,
+                weekly_target,
+                created_at
+            )
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (tracker_id, week_start) DO UPDATE SET
+                weekly_target = excluded.weekly_target
+            """,
+            (tracker_id, current_week_start, weekly_target, timestamp),
+        )
+
+    return {
+        "id": tracker_id,
+        "name": cleaned_name,
+        "description": cleaned_description,
+        "weekly_target": weekly_target,
+        "created_at": tracker_row["created_at"],
+    }
 
 
 def list_week_statuses(tracker_id, week_start):
