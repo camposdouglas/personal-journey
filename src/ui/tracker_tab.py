@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QTabWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -125,10 +126,13 @@ class CreateTrackerDialog(QDialog):
 
 
 class TrackerPage(QWidget):
+    trackerUpdated = Signal(dict)
+
     def __init__(self, tracker):
         super().__init__()
 
         self.tracker = tracker
+        self.is_editing = False
 
         layout = QVBoxLayout()
 
@@ -138,12 +142,31 @@ class TrackerPage(QWidget):
         week_number = get_week_number(today)
 
         target = self.tracker["weekly_target"]
-        name_label = QLabel(self.tracker["name"])
-        name_label.setAlignment(Qt.AlignCenter)
-        name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+        self.name_label = QLabel(self.tracker["name"])
+        self.name_label.setAlignment(Qt.AlignCenter)
+        self.name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
 
-        target_label = QLabel(f"Weekly goal: {target} days")
-        target_label.setAlignment(Qt.AlignCenter)
+        self.name_input = QLineEdit()
+        self.name_input.setAlignment(Qt.AlignCenter)
+        self.name_input.setVisible(False)
+
+        self.target_label = QLabel(f"Weekly goal: {target} days")
+        self.target_label.setAlignment(Qt.AlignCenter)
+
+        self.target_input = QComboBox()
+        for weekly_target in range(1, 8):
+            label = (
+                "1 time per week"
+                if weekly_target == 1
+                else f"{weekly_target} times per week"
+            )
+            self.target_input.addItem(label, weekly_target)
+        self.target_input.setVisible(False)
+
+        target_input_layout = QHBoxLayout()
+        target_input_layout.addStretch()
+        target_input_layout.addWidget(self.target_input)
+        target_input_layout.addStretch()
 
         week_label = QLabel(
             f"Week {week_number} · {week_start.strftime('%b %d')}–"
@@ -153,6 +176,7 @@ class TrackerPage(QWidget):
 
         blocks_layout = QHBoxLayout()
         statuses = repo.list_week_statuses(self.tracker["id"], week_start)
+        self.status_buttons = []
 
         for offset in range(7):
             status_date = week_start + timedelta(days=offset)
@@ -172,6 +196,7 @@ class TrackerPage(QWidget):
                     day, requested_status, button
                 )
             )
+            self.status_buttons.append(status_button)
 
             day_label = QLabel(status_date.strftime("%a"))
             day_label.setAlignment(Qt.AlignCenter)
@@ -185,24 +210,128 @@ class TrackerPage(QWidget):
         description_title.setAlignment(Qt.AlignCenter)
         description_title.setStyleSheet("font-weight: bold;")
 
-        description = self.tracker["description"]
-        description_label = QLabel(description or "No description yet.")
-        description_label.setAlignment(Qt.AlignCenter)
-        description_label.setWordWrap(True)
+        self.description_label = QLabel()
+        self.description_label.setAlignment(Qt.AlignCenter)
+        self.description_label.setWordWrap(True)
 
-        if not description:
-            description_label.setStyleSheet("color: #7D7D7D; font-style: italic;")
+        self.description_input = QTextEdit()
+        self.description_input.setFixedHeight(90)
+        self.description_input.setVisible(False)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+
+        self.edit_button = QPushButton("Edit")
+        self.save_button = QPushButton("Save")
+        self.cancel_button = QPushButton("Cancel")
+
+        self.edit_button.clicked.connect(self.enter_edit_mode)
+        self.save_button.clicked.connect(self.save_changes)
+        self.cancel_button.clicked.connect(self.cancel_editing)
+        self.name_input.textChanged.connect(self.update_save_button)
+
+        buttons_layout.addWidget(self.edit_button)
+        buttons_layout.addWidget(self.cancel_button)
+        buttons_layout.addWidget(self.save_button)
+        buttons_layout.addStretch()
 
         layout.addStretch()
-        layout.addWidget(name_label)
-        layout.addWidget(target_label)
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.name_input)
+        layout.addWidget(self.target_label)
+        layout.addLayout(target_input_layout)
         layout.addWidget(week_label)
         layout.addLayout(blocks_layout)
         layout.addWidget(description_title)
-        layout.addWidget(description_label)
+        layout.addWidget(self.description_label)
+        layout.addWidget(self.description_input)
+        layout.addLayout(buttons_layout)
         layout.addStretch()
 
         self.setLayout(layout)
+        self.update_display()
+        self.enter_read_mode()
+
+    def update_display(self):
+        self.name_label.setText(self.tracker["name"])
+        self.target_label.setText(
+            f"Weekly goal: {self.tracker['weekly_target']} days"
+        )
+
+        description = self.tracker["description"]
+        self.description_label.setText(description or "No description yet.")
+
+        if description:
+            self.description_label.setStyleSheet("")
+        else:
+            self.description_label.setStyleSheet(
+                "color: #7D7D7D; font-style: italic;"
+            )
+
+    def enter_read_mode(self):
+        self.is_editing = False
+
+        self.name_label.setVisible(True)
+        self.name_input.setVisible(False)
+        self.target_label.setVisible(True)
+        self.target_input.setVisible(False)
+        self.description_label.setVisible(True)
+        self.description_input.setVisible(False)
+
+        self.edit_button.setEnabled(True)
+        self.save_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+
+        for button in self.status_buttons:
+            button.setEnabled(not button.blocked)
+
+    def enter_edit_mode(self):
+        self.is_editing = True
+
+        self.name_input.setText(self.tracker["name"])
+        self.target_input.setCurrentIndex(
+            self.target_input.findData(self.tracker["weekly_target"])
+        )
+        self.description_input.setPlainText(self.tracker["description"])
+
+        self.name_label.setVisible(False)
+        self.name_input.setVisible(True)
+        self.target_label.setVisible(False)
+        self.target_input.setVisible(True)
+        self.description_label.setVisible(False)
+        self.description_input.setVisible(True)
+
+        self.edit_button.setEnabled(False)
+        self.update_save_button(self.name_input.text())
+        self.cancel_button.setEnabled(True)
+
+        for button in self.status_buttons:
+            button.setEnabled(False)
+
+        self.name_input.setFocus()
+
+    def save_changes(self):
+        name = self.name_input.text().strip()
+
+        if not name:
+            return
+
+        self.tracker = repo.update_tracker(
+            self.tracker["id"],
+            name,
+            self.description_input.toPlainText(),
+            self.target_input.currentData(),
+        )
+
+        self.update_display()
+        self.trackerUpdated.emit(self.tracker)
+        self.enter_read_mode()
+
+    def cancel_editing(self):
+        self.enter_read_mode()
+
+    def update_save_button(self, name):
+        self.save_button.setEnabled(self.is_editing and bool(name.strip()))
 
     def update_daily_status(self, status_date, requested_status, status_button):
         new_status = repo.toggle_daily_status(
@@ -251,6 +380,11 @@ class TrackerTab(QWidget):
 
     def add_tracker_tab(self, tracker, index=None):
         page = TrackerPage(tracker)
+        page.trackerUpdated.connect(
+            lambda updated_tracker, tracker_page=page: self.update_tracker_tab(
+                tracker_page, updated_tracker
+            )
+        )
 
         if index is None:
             index = self.tracker_tabs.addTab(page, tracker["name"])
@@ -259,6 +393,12 @@ class TrackerTab(QWidget):
 
         self.tracker_tabs.tabBar().setTabData(index, tracker["id"])
         return index
+
+    def update_tracker_tab(self, page, tracker):
+        index = self.tracker_tabs.indexOf(page)
+
+        if index != -1:
+            self.tracker_tabs.setTabText(index, tracker["name"])
 
     def update_overall_empty_state(self):
         has_trackers = self.tracker_tabs.count() > 2
