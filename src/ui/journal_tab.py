@@ -57,6 +57,7 @@ class JournalTab(QWidget):
             self.entry_viewer_panel,
             self.title_input,
             self.title_error_label,
+            self.metadata_label,
             self.content_editor,
             self.edit_button,
             self.save_button,
@@ -98,6 +99,7 @@ class JournalTab(QWidget):
 
         self.title_input.setText(entry_data["title"])
         self.content_editor.setText(entry_data["content"])
+        self.update_metadata(entry_data)
 
         self.enter_read_mode()
 
@@ -150,7 +152,9 @@ class JournalTab(QWidget):
             if self.current_entry_id is None:
                 return
 
-            repo.update_entry(self.current_entry_id, new_title, new_content)
+            entry = repo.update_entry(
+                self.current_entry_id, new_title, new_content
+            )
 
             item = self.find_entry_item_by_id(self.current_entry_id)
 
@@ -158,6 +162,7 @@ class JournalTab(QWidget):
                 item.setText(new_title)
 
         self.title_input.setText(new_title)
+        self.update_metadata(entry)
 
         self.enter_read_mode()
 
@@ -235,6 +240,7 @@ class JournalTab(QWidget):
         self.current_entry_id = None
 
         self.title_input.clear()
+        self.metadata_label.clear()
         self.content_editor.clear()
 
         self.enter_empty_mode()
@@ -305,6 +311,7 @@ class JournalTab(QWidget):
         self.is_new_entry = True
 
         self.title_input.setText(temporary_title)
+        self.metadata_label.clear()
         self.content_editor.clear()
 
         self.enter_edit_mode()
@@ -318,9 +325,21 @@ class JournalTab(QWidget):
         self.title_error_label.setVisible(False)
         self.title_input.setToolTip("")
 
+    def update_metadata(self, entry):
+        created_at = format_timestamp(entry["created_at"])
+        updated_at = format_timestamp(entry["updated_at"])
+        self.metadata_label.setText(
+            f"Created: {created_at} · Updated: {updated_at}"
+        )
+
 
 def create_journal_tab():
     return JournalTab()
+
+
+def format_timestamp(timestamp):
+    parsed_timestamp = datetime.fromisoformat(timestamp)
+    return parsed_timestamp.strftime("%b %d, %Y at %H:%M:%S")
 
 
 def create_entries_panel(entries):
@@ -372,6 +391,9 @@ def create_entry_viewer_panel():
     title_input.setReadOnly(True)
     title_input.setFocusPolicy(Qt.NoFocus)
 
+    metadata_label = QLabel()
+    metadata_label.setStyleSheet("color: #7D7D7D;")
+
     content_label = QLabel("Content")
     content_editor = QTextEdit()
     content_editor.setPlaceholderText("Select an entry to read or edit its content.")
@@ -397,6 +419,7 @@ def create_entry_viewer_panel():
 
     layout.addLayout(title_header_layout)
     layout.addWidget(title_input)
+    layout.addWidget(metadata_label)
     layout.addWidget(content_label)
     layout.addWidget(content_editor)
     layout.addLayout(buttons_layout)
@@ -406,6 +429,7 @@ def create_entry_viewer_panel():
         panel,
         title_input,
         title_error_label,
+        metadata_label,
         content_editor,
         edit_button,
         save_button,
