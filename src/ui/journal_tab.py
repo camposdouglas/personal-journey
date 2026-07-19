@@ -245,6 +245,7 @@ class JournalTab(QWidget):
     def enter_read_mode(self):
         self.is_editing = False
         self.entries_list.interaction_locked = False
+        self.new_entry_button.setEnabled(True)
 
         self.title_input.setReadOnly(True)
         self.title_input.setFocusPolicy(Qt.NoFocus)
@@ -261,6 +262,7 @@ class JournalTab(QWidget):
     def enter_edit_mode(self):
         self.is_editing = True
         self.entries_list.interaction_locked = True
+        self.new_entry_button.setEnabled(False)
 
         self.title_input.setReadOnly(False)
         self.title_input.setFocusPolicy(Qt.StrongFocus)
@@ -277,6 +279,7 @@ class JournalTab(QWidget):
     def enter_empty_mode(self):
         self.is_editing = False
         self.entries_list.interaction_locked = False
+        self.new_entry_button.setEnabled(True)
 
         self.title_input.setReadOnly(True)
         self.title_input.setFocusPolicy(Qt.NoFocus)
