@@ -1,16 +1,84 @@
+from datetime import date, timedelta
+
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 import tracker_repository as repo
+from week_utils import get_week_number, get_week_start
+
+
+class DayStatusButton(QPushButton):
+    statusRequested = Signal(int)
+
+    COLORS = {
+        None: "#7D7D7D",
+        1: "#39FF14",
+        -1: "#FF3131",
+    }
+
+    def __init__(self, status=None, blocked=False):
+        super().__init__()
+
+        self.status = status
+        self.blocked = blocked
+
+        self.setMinimumHeight(90)
+        self.setEnabled(not blocked)
+        self.set_status(status)
+
+    def set_status(self, status):
+        self.status = status
+
+        if self.blocked:
+            background_color = "rgba(125, 125, 125, 80)"
+            symbol = ""
+        else:
+            background_color = self.COLORS[status]
+            symbol = "+" if status == 1 else "−" if status == -1 else ""
+
+        self.setText(symbol)
+        self.setStyleSheet(
+            f"""
+            QPushButton {{
+                background-color: {background_color};
+                border: none;
+                border-radius: 6px;
+                color: black;
+                font-size: 32px;
+                font-weight: bold;
+            }}
+            QPushButton:disabled {{
+                background-color: rgba(125, 125, 125, 80);
+                border: none;
+            }}
+            """
+        )
+
+    def mousePressEvent(self, event):
+        if self.blocked:
+            return
+
+        if event.button() == Qt.LeftButton:
+            self.statusRequested.emit(1)
+            return
+
+        if event.button() == Qt.RightButton:
+            self.statusRequested.emit(-1)
+            return
+
+        super().mousePressEvent(event)
 
 
 class CreateTrackerDialog(QDialog):
@@ -98,16 +166,63 @@ class TrackerTab(QWidget):
         page = QWidget()
         layout = QVBoxLayout()
 
-        target = tracker["weekly_target"]
-        target_label = QLabel(f"Weekly target: {target} of 7 days")
-        placeholder_label = QLabel("Daily tracking blocks will appear here.")
+        today = date.today()
+        week_start = get_week_start(today)
+        week_end = week_start + timedelta(days=6)
+        week_number = get_week_number(today)
 
-        layout.addWidget(target_label)
-        layout.addWidget(placeholder_label)
+        target = tracker["weekly_target"]
+        week_label = QLabel(
+            f"Week {week_number} · {week_start.strftime('%b %d')}–"
+            f"{week_end.strftime('%b %d')} · Target: {target} days"
+        )
+
+        blocks_layout = QHBoxLayout()
+        statuses = repo.list_week_statuses(tracker["id"], week_start)
+
+        for offset in range(7):
+            status_date = week_start + timedelta(days=offset)
+            day_layout = QVBoxLayout()
+
+            date_label = QLabel(str(status_date.day))
+            date_label.setAlignment(Qt.AlignCenter)
+
+            status_button = DayStatusButton(
+                status=statuses.get(status_date),
+                blocked=status_date > today,
+            )
+            status_button.statusRequested.connect(
+                lambda requested_status,
+                tracker_id=tracker["id"],
+                day=status_date,
+                button=status_button: self.update_daily_status(
+                    tracker_id, day, requested_status, button
+                )
+            )
+
+            day_label = QLabel(status_date.strftime("%a"))
+            day_label.setAlignment(Qt.AlignCenter)
+
+            day_layout.addWidget(date_label)
+            day_layout.addWidget(status_button)
+            day_layout.addWidget(day_label)
+            blocks_layout.addLayout(day_layout)
+
+        layout.addStretch()
+        layout.addWidget(week_label)
+        layout.addLayout(blocks_layout)
         layout.addStretch()
 
         page.setLayout(layout)
         return page
+
+    def update_daily_status(
+        self, tracker_id, status_date, requested_status, status_button
+    ):
+        new_status = repo.toggle_daily_status(
+            tracker_id, status_date, requested_status
+        )
+        status_button.set_status(new_status)
 
     def add_tracker_tab(self, tracker, index=None):
         page = self.create_tracker_page(tracker)
