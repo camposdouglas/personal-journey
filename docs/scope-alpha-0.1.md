@@ -1,5 +1,12 @@
 # Personal Journey — Alpha 0.1 Scope
 
+> **Historical document:** This file preserves the original Alpha 0.1 plan and
+> no longer describes the current implementation. The project replaced MySQL
+> with SQLite, expanded from Journal and Tracker to Routine, Tracker, and
+> Journal, and evolved Tracker beyond the original event-type/occurrence model.
+> Alpha 0.1 is complete. See `AGENTS.md` for the implemented architecture,
+> product rules, privacy requirements, test baseline, and current status.
+
 ## Overview
 
 Personal Journey is a local desktop application for personal journaling and routine tracking.
