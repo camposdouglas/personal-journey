@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressBar,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -129,6 +131,7 @@ class CreateTrackerDialog(QDialog):
 class TrackerPage(QWidget):
     trackerUpdated = Signal(dict)
     trackerArchived = Signal()
+    progressChanged = Signal()
 
     def __init__(self, tracker):
         super().__init__()
@@ -361,6 +364,108 @@ class TrackerPage(QWidget):
             self.tracker["id"], status_date, requested_status
         )
         status_button.set_status(new_status)
+        self.progressChanged.emit()
+
+
+class OverallPage(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QVBoxLayout()
+
+        self.week_label = QLabel()
+        self.week_label.setAlignment(Qt.AlignCenter)
+        self.week_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+
+        self.rows_container = QWidget()
+        self.rows_layout = QVBoxLayout()
+        self.rows_container.setLayout(self.rows_layout)
+        self.scroll_area.setWidget(self.rows_container)
+
+        layout.addWidget(self.week_label)
+        layout.addWidget(self.scroll_area)
+
+        self.setLayout(layout)
+        self.refresh()
+
+    def refresh(self):
+        today = date.today()
+        week_start = get_week_start(today)
+        week_end = week_start + timedelta(days=6)
+        week_number = get_week_number(today)
+
+        self.week_label.setText(
+            f"Week {week_number} · {week_start.strftime('%b %d')}–"
+            f"{week_end.strftime('%b %d')}"
+        )
+
+        while self.rows_layout.count():
+            item = self.rows_layout.takeAt(0)
+            widget = item.widget()
+
+            if widget is not None:
+                widget.deleteLater()
+
+        progress_rows = repo.list_week_progress(week_start)
+
+        if not progress_rows:
+            empty_label = QLabel(
+                "No trackers yet. Use + to create your first tracker."
+            )
+            empty_label.setAlignment(Qt.AlignCenter)
+            self.rows_layout.addWidget(empty_label)
+            self.rows_layout.addStretch()
+            return
+
+        for tracker_progress in progress_rows:
+            self.rows_layout.addWidget(
+                self.create_progress_row(tracker_progress)
+            )
+
+        self.rows_layout.addStretch()
+
+    def create_progress_row(self, tracker_progress):
+        row = QWidget()
+        layout = QVBoxLayout()
+
+        label_layout = QHBoxLayout()
+        name_label = QLabel(tracker_progress["name"])
+
+        target = tracker_progress["weekly_target"]
+        completed = min(tracker_progress["completed_days"], target)
+        count_label = QLabel(f"{completed} / {target}")
+
+        label_layout.addWidget(name_label)
+        label_layout.addStretch()
+        label_layout.addWidget(count_label)
+
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, target)
+        progress_bar.setValue(completed)
+        progress_bar.setTextVisible(False)
+        progress_bar.setFixedHeight(24)
+        progress_bar.setStyleSheet(
+            """
+            QProgressBar {
+                background-color: #7D7D7D;
+                border: none;
+                border-radius: 6px;
+            }
+            QProgressBar::chunk {
+                background-color: #39FF14;
+                border-radius: 6px;
+            }
+            """
+        )
+
+        layout.addLayout(label_layout)
+        layout.addWidget(progress_bar)
+
+        row.setLayout(layout)
+        return row
 
 
 class TrackerTab(QWidget):
@@ -370,7 +475,8 @@ class TrackerTab(QWidget):
         layout = QVBoxLayout()
 
         self.tracker_tabs = QTabWidget()
-        self.tracker_tabs.addTab(self.create_overall_tab(), "Overall")
+        self.overall_page = OverallPage()
+        self.tracker_tabs.addTab(self.overall_page, "Overall")
 
         for tracker in repo.list_active_trackers():
             self.add_tracker_tab(tracker)
@@ -382,24 +488,8 @@ class TrackerTab(QWidget):
         self.last_selected_tab_index = 0
         self.tracker_tabs.currentChanged.connect(self.handle_tab_changed)
 
-        self.update_overall_empty_state()
-
         layout.addWidget(self.tracker_tabs)
         self.setLayout(layout)
-
-    def create_overall_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout()
-
-        self.overall_empty_label = QLabel(
-            "No trackers yet. Use + to create your first tracker."
-        )
-
-        layout.addWidget(self.overall_empty_label)
-        layout.addStretch()
-
-        tab.setLayout(layout)
-        return tab
 
     def add_tracker_tab(self, tracker, index=None):
         page = TrackerPage(tracker)
@@ -411,6 +501,7 @@ class TrackerTab(QWidget):
         page.trackerArchived.connect(
             lambda tracker_page=page: self.remove_tracker_tab(tracker_page)
         )
+        page.progressChanged.connect(self.overall_page.refresh)
 
         if index is None:
             index = self.tracker_tabs.addTab(page, tracker["name"])
@@ -425,6 +516,7 @@ class TrackerTab(QWidget):
 
         if index != -1:
             self.tracker_tabs.setTabText(index, tracker["name"])
+            self.overall_page.refresh()
 
     def remove_tracker_tab(self, page):
         index = self.tracker_tabs.indexOf(page)
@@ -437,11 +529,7 @@ class TrackerTab(QWidget):
         page.deleteLater()
 
         self.add_tracker_tab_index -= 1
-        self.update_overall_empty_state()
-
-    def update_overall_empty_state(self):
-        has_trackers = self.tracker_tabs.count() > 2
-        self.overall_empty_label.setVisible(not has_trackers)
+        self.overall_page.refresh()
 
     def handle_tab_changed(self, index):
         if index == self.add_tracker_tab_index:
@@ -461,11 +549,14 @@ class TrackerTab(QWidget):
                 tracker, self.add_tracker_tab_index
             )
             self.add_tracker_tab_index += 1
-            self.update_overall_empty_state()
+            self.overall_page.refresh()
             self.tracker_tabs.setCurrentIndex(new_tab_index)
             return
 
         self.last_selected_tab_index = index
+
+        if index == 0:
+            self.overall_page.refresh()
 
 
 def create_tracker_tab():
