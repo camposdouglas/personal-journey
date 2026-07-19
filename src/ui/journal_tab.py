@@ -25,6 +25,12 @@ class ClearableListWidget(QListWidget):
         super().__init__()
         self.interaction_locked = False
 
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+
+        if not self.selectedItems():
+            self.setCurrentRow(-1)
+
     def mousePressEvent(self, event):
         if self.interaction_locked:
             return
@@ -95,7 +101,7 @@ class JournalTab(QWidget):
         self.current_entry_id = entry_id
 
         self.title_input.setText(entry_data["title"])
-        self.content_editor.setText(entry_data["content"])
+        self.content_editor.setPlainText(entry_data["content"])
         self.update_metadata(entry_data)
 
         self.enter_read_mode()
@@ -186,7 +192,7 @@ class JournalTab(QWidget):
         original_content = self.content_editor.property("original_text")
 
         self.title_input.setText(original_title)
-        self.content_editor.setText(original_content)
+        self.content_editor.setPlainText(original_content)
 
         self.enter_read_mode()
 
