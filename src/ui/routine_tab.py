@@ -19,6 +19,12 @@ from ui.routine_clock import RoutineClock
 
 
 class RoutineBlockList(QListWidget):
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+
+        if not self.selectedItems():
+            self.setCurrentRow(-1)
+
     def mousePressEvent(self, event):
         clicked_item = self.itemAt(event.position().toPoint())
 
