@@ -124,6 +124,93 @@ class CreateTrackerDialog(QDialog):
         return self.weekly_target_input.currentData()
 
 
+class TrackerPage(QWidget):
+    def __init__(self, tracker):
+        super().__init__()
+
+        self.tracker = tracker
+
+        layout = QVBoxLayout()
+
+        today = date.today()
+        week_start = get_week_start(today)
+        week_end = week_start + timedelta(days=6)
+        week_number = get_week_number(today)
+
+        target = self.tracker["weekly_target"]
+        name_label = QLabel(self.tracker["name"])
+        name_label.setAlignment(Qt.AlignCenter)
+        name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+
+        target_label = QLabel(f"Weekly goal: {target} days")
+        target_label.setAlignment(Qt.AlignCenter)
+
+        week_label = QLabel(
+            f"Week {week_number} · {week_start.strftime('%b %d')}–"
+            f"{week_end.strftime('%b %d')}"
+        )
+        week_label.setAlignment(Qt.AlignCenter)
+
+        blocks_layout = QHBoxLayout()
+        statuses = repo.list_week_statuses(self.tracker["id"], week_start)
+
+        for offset in range(7):
+            status_date = week_start + timedelta(days=offset)
+            day_layout = QVBoxLayout()
+
+            date_label = QLabel(str(status_date.day))
+            date_label.setAlignment(Qt.AlignCenter)
+
+            status_button = DayStatusButton(
+                status=statuses.get(status_date),
+                blocked=status_date > today,
+            )
+            status_button.statusRequested.connect(
+                lambda requested_status,
+                day=status_date,
+                button=status_button: self.update_daily_status(
+                    day, requested_status, button
+                )
+            )
+
+            day_label = QLabel(status_date.strftime("%a"))
+            day_label.setAlignment(Qt.AlignCenter)
+
+            day_layout.addWidget(date_label)
+            day_layout.addWidget(status_button)
+            day_layout.addWidget(day_label)
+            blocks_layout.addLayout(day_layout)
+
+        description_title = QLabel("Description")
+        description_title.setAlignment(Qt.AlignCenter)
+        description_title.setStyleSheet("font-weight: bold;")
+
+        description = self.tracker["description"]
+        description_label = QLabel(description or "No description yet.")
+        description_label.setAlignment(Qt.AlignCenter)
+        description_label.setWordWrap(True)
+
+        if not description:
+            description_label.setStyleSheet("color: #7D7D7D; font-style: italic;")
+
+        layout.addStretch()
+        layout.addWidget(name_label)
+        layout.addWidget(target_label)
+        layout.addWidget(week_label)
+        layout.addLayout(blocks_layout)
+        layout.addWidget(description_title)
+        layout.addWidget(description_label)
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+    def update_daily_status(self, status_date, requested_status, status_button):
+        new_status = repo.toggle_daily_status(
+            self.tracker["id"], status_date, requested_status
+        )
+        status_button.set_status(new_status)
+
+
 class TrackerTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -162,94 +249,8 @@ class TrackerTab(QWidget):
         tab.setLayout(layout)
         return tab
 
-    def create_tracker_page(self, tracker):
-        page = QWidget()
-        layout = QVBoxLayout()
-
-        today = date.today()
-        week_start = get_week_start(today)
-        week_end = week_start + timedelta(days=6)
-        week_number = get_week_number(today)
-
-        target = tracker["weekly_target"]
-        name_label = QLabel(tracker["name"])
-        name_label.setAlignment(Qt.AlignCenter)
-        name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
-
-        target_label = QLabel(f"Weekly goal: {target} days")
-        target_label.setAlignment(Qt.AlignCenter)
-
-        week_label = QLabel(
-            f"Week {week_number} · {week_start.strftime('%b %d')}–"
-            f"{week_end.strftime('%b %d')}"
-        )
-        week_label.setAlignment(Qt.AlignCenter)
-
-        blocks_layout = QHBoxLayout()
-        statuses = repo.list_week_statuses(tracker["id"], week_start)
-
-        for offset in range(7):
-            status_date = week_start + timedelta(days=offset)
-            day_layout = QVBoxLayout()
-
-            date_label = QLabel(str(status_date.day))
-            date_label.setAlignment(Qt.AlignCenter)
-
-            status_button = DayStatusButton(
-                status=statuses.get(status_date),
-                blocked=status_date > today,
-            )
-            status_button.statusRequested.connect(
-                lambda requested_status,
-                tracker_id=tracker["id"],
-                day=status_date,
-                button=status_button: self.update_daily_status(
-                    tracker_id, day, requested_status, button
-                )
-            )
-
-            day_label = QLabel(status_date.strftime("%a"))
-            day_label.setAlignment(Qt.AlignCenter)
-
-            day_layout.addWidget(date_label)
-            day_layout.addWidget(status_button)
-            day_layout.addWidget(day_label)
-            blocks_layout.addLayout(day_layout)
-
-        description_title = QLabel("Description")
-        description_title.setAlignment(Qt.AlignCenter)
-        description_title.setStyleSheet("font-weight: bold;")
-
-        description = tracker["description"]
-        description_label = QLabel(description or "No description yet.")
-        description_label.setAlignment(Qt.AlignCenter)
-        description_label.setWordWrap(True)
-
-        if not description:
-            description_label.setStyleSheet("color: #7D7D7D; font-style: italic;")
-
-        layout.addStretch()
-        layout.addWidget(name_label)
-        layout.addWidget(target_label)
-        layout.addWidget(week_label)
-        layout.addLayout(blocks_layout)
-        layout.addWidget(description_title)
-        layout.addWidget(description_label)
-        layout.addStretch()
-
-        page.setLayout(layout)
-        return page
-
-    def update_daily_status(
-        self, tracker_id, status_date, requested_status, status_button
-    ):
-        new_status = repo.toggle_daily_status(
-            tracker_id, status_date, requested_status
-        )
-        status_button.set_status(new_status)
-
     def add_tracker_tab(self, tracker, index=None):
-        page = self.create_tracker_page(tracker)
+        page = TrackerPage(tracker)
 
         if index is None:
             index = self.tracker_tabs.addTab(page, tracker["name"])
