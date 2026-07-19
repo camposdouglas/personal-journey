@@ -4,6 +4,7 @@ __pycache__/
 
 # SQLite database files — never commit local data
 *.db
+*.db-*
 
 # Private, machine-local agent context — never commit
 AGENTS.local.md
