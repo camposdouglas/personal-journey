@@ -13,8 +13,8 @@ class MainWindow(QWidget):
         self.resize(1000, 650)
 
         tabs = QTabWidget()
-        tabs.addTab(create_journal_tab(), "Journal")
         tabs.addTab(create_tracker_tab(), "Tracker")
+        tabs.addTab(create_journal_tab(), "Journal")
 
         layout = QVBoxLayout()
         layout.addWidget(tabs)
