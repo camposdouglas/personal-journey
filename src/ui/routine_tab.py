@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QTabWidget,
     QTimeEdit,
@@ -22,6 +23,7 @@ class RoutineSchedulePage(QWidget):
         super().__init__()
 
         self.schedule_type = schedule_type
+        self.editing_block_id = None
 
         layout = QHBoxLayout()
 
@@ -50,30 +52,42 @@ class RoutineSchedulePage(QWidget):
         self.color_input = QLineEdit()
         self.color_input.setPlaceholderText("#RRGGBB")
 
-        self.add_button = QPushButton("Add")
-        self.add_button.setEnabled(False)
+        self.add_edit_button = QPushButton("Add")
+        self.save_button = QPushButton("Save")
+        self.cancel_button = QPushButton("Cancel")
+        self.delete_button = QPushButton("Delete")
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.add_edit_button)
+        buttons_layout.addWidget(self.save_button)
+        buttons_layout.addWidget(self.cancel_button)
+        buttons_layout.addWidget(self.delete_button)
 
         self.error_label = QLabel()
         self.error_label.setStyleSheet("color: #FF3131;")
         self.error_label.setWordWrap(True)
 
-        self.name_input.textChanged.connect(self.update_form_state)
-        self.start_time_input.timeChanged.connect(self.update_form_state)
-        self.end_time_input.timeChanged.connect(self.update_form_state)
-        self.color_input.textChanged.connect(self.update_form_state)
-        self.add_button.clicked.connect(self.add_block)
+        self.name_input.textChanged.connect(self.handle_form_changed)
+        self.start_time_input.timeChanged.connect(self.handle_form_changed)
+        self.end_time_input.timeChanged.connect(self.handle_form_changed)
+        self.color_input.textChanged.connect(self.handle_form_changed)
+        self.add_edit_button.clicked.connect(self.handle_add_edit)
+        self.save_button.clicked.connect(self.save_edit)
+        self.cancel_button.clicked.connect(self.cancel_edit)
+        self.delete_button.clicked.connect(self.delete_block)
 
         form_layout.addRow("Name", self.name_input)
         form_layout.addRow("Start", self.start_time_input)
         form_layout.addRow("End", self.end_time_input)
         form_layout.addRow("Color", self.color_input)
         form_layout.addRow(self.error_label)
-        form_layout.addRow(self.add_button)
+        form_layout.addRow(buttons_layout)
 
         tasks_label = QLabel("Routine blocks")
         tasks_label.setStyleSheet("font-weight: bold;")
 
         self.tasks_list = QListWidget()
+        self.tasks_list.currentItemChanged.connect(self.update_form_state)
         self.empty_label = QLabel("No routine blocks yet.")
 
         layout.addLayout(form_layout)
@@ -83,9 +97,17 @@ class RoutineSchedulePage(QWidget):
 
         panel.setLayout(layout)
         self.refresh_tasks()
+        self.update_form_state()
         return panel
 
-    def update_form_state(self):
+    def handle_form_changed(self):
+        if self.editing_block_id is None:
+            self.tasks_list.clearSelection()
+            self.tasks_list.setCurrentItem(None)
+
+        self.update_form_state()
+
+    def update_form_state(self, *args):
         name = self.name_input.text().strip()
         color = self.color_input.text().strip()
         start_minute = time_to_minutes(self.start_time_input.time())
@@ -105,10 +127,29 @@ class RoutineSchedulePage(QWidget):
         )
 
         self.error_label.setText(error)
-        self.add_button.setEnabled(is_valid)
+        selected_block_id = self.current_block_id()
+        is_editing = self.editing_block_id is not None
+
+        self.add_edit_button.setText(
+            "Edit" if selected_block_id is not None else "Add"
+        )
+        self.add_edit_button.setEnabled(
+            not is_editing and (selected_block_id is not None or is_valid)
+        )
+        self.save_button.setEnabled(is_editing and is_valid)
+        self.cancel_button.setEnabled(is_editing)
+        self.delete_button.setEnabled(
+            is_editing or selected_block_id is not None
+        )
+
+    def handle_add_edit(self):
+        if self.current_block_id() is None:
+            self.add_block()
+        else:
+            self.start_edit()
 
     def add_block(self):
-        block = repo.create_block(
+        repo.create_block(
             self.schedule_type,
             self.name_input.text(),
             time_to_minutes(self.start_time_input.time()),
@@ -117,12 +158,81 @@ class RoutineSchedulePage(QWidget):
         )
 
         self.refresh_tasks()
-        self.tasks_list.setCurrentRow(
-            self.find_block_row(block["id"])
-        )
-
         self.name_input.clear()
         self.color_input.clear()
+        self.update_form_state()
+
+    def start_edit(self, *args):
+        block_id = self.current_block_id()
+
+        if block_id is None:
+            return
+
+        block = repo.get_block(block_id)
+
+        if block is None:
+            self.refresh_tasks()
+            self.update_form_state()
+            return
+
+        self.editing_block_id = block_id
+        self.tasks_list.setEnabled(False)
+        self.name_input.setText(block["name"])
+        self.start_time_input.setTime(minutes_to_time(block["start_minute"]))
+        self.end_time_input.setTime(minutes_to_time(block["end_minute"]))
+        self.color_input.setText(block["color"])
+        self.update_form_state()
+
+    def save_edit(self):
+        if self.editing_block_id is None:
+            return
+
+        repo.update_block(
+            self.editing_block_id,
+            self.name_input.text(),
+            time_to_minutes(self.start_time_input.time()),
+            time_to_minutes(self.end_time_input.time()),
+            self.color_input.text().strip(),
+        )
+        self.finish_edit()
+
+    def cancel_edit(self):
+        if self.editing_block_id is None:
+            return
+
+        self.finish_edit()
+
+    def finish_edit(self):
+        self.editing_block_id = None
+        self.tasks_list.setEnabled(True)
+        self.name_input.clear()
+        self.color_input.clear()
+        self.refresh_tasks()
+        self.update_form_state()
+
+    def delete_block(self):
+        block_id = self.editing_block_id or self.current_block_id()
+
+        if block_id is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Delete Routine Block",
+            "Delete this routine block permanently?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        repo.delete_block(block_id)
+        self.editing_block_id = None
+        self.tasks_list.setEnabled(True)
+        self.name_input.clear()
+        self.color_input.clear()
+        self.refresh_tasks()
         self.update_form_state()
 
     def refresh_tasks(self):
@@ -149,6 +259,10 @@ class RoutineSchedulePage(QWidget):
                 return row
 
         return -1
+
+    def current_block_id(self):
+        item = self.tasks_list.currentItem()
+        return item.data(Qt.UserRole) if item is not None else None
 
 
 class RoutineTab(QWidget):
@@ -179,3 +293,8 @@ def time_to_minutes(time):
 def format_minutes(minutes):
     hour, minute = divmod(minutes, 60)
     return f"{hour:02d}:{minute:02d}"
+
+
+def minutes_to_time(minutes):
+    hour, minute = divmod(minutes, 60)
+    return QTime(hour, minute)
