@@ -18,6 +18,17 @@ import routine_repository as repo
 from ui.routine_clock import RoutineClock
 
 
+class RoutineBlockList(QListWidget):
+    def mousePressEvent(self, event):
+        clicked_item = self.itemAt(event.position().toPoint())
+
+        if clicked_item is None:
+            self.clearSelection()
+            self.setCurrentRow(-1)
+
+        super().mousePressEvent(event)
+
+
 class RoutineSchedulePage(QWidget):
     def __init__(self, schedule_type):
         super().__init__()
@@ -86,7 +97,7 @@ class RoutineSchedulePage(QWidget):
         tasks_label = QLabel("Routine blocks")
         tasks_label.setStyleSheet("font-weight: bold;")
 
-        self.tasks_list = QListWidget()
+        self.tasks_list = RoutineBlockList()
         self.tasks_list.currentItemChanged.connect(self.update_form_state)
         self.empty_label = QLabel("No routine blocks yet.")
 
