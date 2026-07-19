@@ -141,6 +141,41 @@ def update_tracker(tracker_id, name, description, weekly_target):
     }
 
 
+def archive_tracker(tracker_id):
+    timestamp = _now()
+    current_week_start = get_week_start(date.today()).isoformat()
+
+    with get_connection() as connection:
+        tracker_exists = connection.execute(
+            """
+            SELECT 1
+            FROM trackers
+            WHERE id = ? AND archived_at IS NULL
+            """,
+            (tracker_id,),
+        ).fetchone()
+
+        if tracker_exists is None:
+            raise ValueError("Active tracker not found.")
+
+        connection.execute(
+            """
+            UPDATE trackers
+            SET archived_at = ?
+            WHERE id = ?
+            """,
+            (timestamp, tracker_id),
+        )
+
+        connection.execute(
+            """
+            DELETE FROM tracker_daily_statuses
+            WHERE tracker_id = ? AND status_date >= ?
+            """,
+            (tracker_id, current_week_start),
+        )
+
+
 def list_week_statuses(tracker_id, week_start):
     week_start = get_week_start(week_start)
     week_end = week_start + timedelta(days=6)
