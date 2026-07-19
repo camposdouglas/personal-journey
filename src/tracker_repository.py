@@ -82,6 +82,77 @@ def list_active_trackers():
     return [dict(row) for row in rows]
 
 
+def list_week_progress(week_start):
+    week_start = get_week_start(week_start)
+    week_end = week_start + timedelta(days=6)
+    progress = []
+
+    with get_connection() as connection:
+        trackers = connection.execute(
+            """
+            SELECT id, name, created_at, archived_at
+            FROM trackers
+            ORDER BY created_at, id
+            """
+        ).fetchall()
+
+        for tracker in trackers:
+            created_date = datetime.fromisoformat(tracker["created_at"]).date()
+            created_week = get_week_start(created_date)
+
+            if week_start < created_week:
+                continue
+
+            if tracker["archived_at"] is not None:
+                archived_date = datetime.fromisoformat(
+                    tracker["archived_at"]
+                ).date()
+                archived_week = get_week_start(archived_date)
+
+                if week_start >= archived_week:
+                    continue
+
+            target_row = connection.execute(
+                """
+                SELECT weekly_target
+                FROM tracker_weekly_targets
+                WHERE tracker_id = ? AND week_start <= ?
+                ORDER BY week_start DESC
+                LIMIT 1
+                """,
+                (tracker["id"], week_start.isoformat()),
+            ).fetchone()
+
+            if target_row is None:
+                continue
+
+            completed_days = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM tracker_daily_statuses
+                WHERE tracker_id = ?
+                  AND status_date BETWEEN ? AND ?
+                  AND status = 1
+                """,
+                (
+                    tracker["id"],
+                    week_start.isoformat(),
+                    week_end.isoformat(),
+                ),
+            ).fetchone()[0]
+
+            progress.append(
+                {
+                    "id": tracker["id"],
+                    "name": tracker["name"],
+                    "weekly_target": target_row["weekly_target"],
+                    "completed_days": completed_days,
+                }
+            )
+
+    return progress
+
+
 def update_tracker(tracker_id, name, description, weekly_target):
     cleaned_name = name.strip()
     cleaned_description = description.strip()
