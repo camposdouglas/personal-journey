@@ -172,10 +172,18 @@ class TrackerTab(QWidget):
         week_number = get_week_number(today)
 
         target = tracker["weekly_target"]
+        name_label = QLabel(tracker["name"])
+        name_label.setAlignment(Qt.AlignCenter)
+        name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+
+        target_label = QLabel(f"Weekly goal: {target} days")
+        target_label.setAlignment(Qt.AlignCenter)
+
         week_label = QLabel(
             f"Week {week_number} · {week_start.strftime('%b %d')}–"
-            f"{week_end.strftime('%b %d')} · Target: {target} days"
+            f"{week_end.strftime('%b %d')}"
         )
+        week_label.setAlignment(Qt.AlignCenter)
 
         blocks_layout = QHBoxLayout()
         statuses = repo.list_week_statuses(tracker["id"], week_start)
@@ -208,9 +216,25 @@ class TrackerTab(QWidget):
             day_layout.addWidget(day_label)
             blocks_layout.addLayout(day_layout)
 
+        description_title = QLabel("Description")
+        description_title.setAlignment(Qt.AlignCenter)
+        description_title.setStyleSheet("font-weight: bold;")
+
+        description = tracker["description"]
+        description_label = QLabel(description or "No description yet.")
+        description_label.setAlignment(Qt.AlignCenter)
+        description_label.setWordWrap(True)
+
+        if not description:
+            description_label.setStyleSheet("color: #7D7D7D; font-style: italic;")
+
         layout.addStretch()
+        layout.addWidget(name_label)
+        layout.addWidget(target_label)
         layout.addWidget(week_label)
         layout.addLayout(blocks_layout)
+        layout.addWidget(description_title)
+        layout.addWidget(description_label)
         layout.addStretch()
 
         page.setLayout(layout)
