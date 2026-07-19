@@ -133,18 +133,18 @@ class TrackerPage(QWidget):
     trackerArchived = Signal()
     progressChanged = Signal()
 
-    def __init__(self, tracker):
+    def __init__(self, tracker, week_start):
         super().__init__()
 
         self.tracker = tracker
+        self.week_start = week_start
         self.is_editing = False
 
         layout = QVBoxLayout()
 
         today = date.today()
-        week_start = get_week_start(today)
-        week_end = week_start + timedelta(days=6)
-        week_number = get_week_number(today)
+        week_end = self.week_start + timedelta(days=6)
+        week_number = get_week_number(self.week_start)
 
         target = self.tracker["weekly_target"]
         self.name_label = QLabel(self.tracker["name"])
@@ -174,17 +174,17 @@ class TrackerPage(QWidget):
         target_input_layout.addStretch()
 
         week_label = QLabel(
-            f"Week {week_number} · {week_start.strftime('%b %d')}–"
+            f"Week {week_number} · {self.week_start.strftime('%b %d')}–"
             f"{week_end.strftime('%b %d')}"
         )
         week_label.setAlignment(Qt.AlignCenter)
 
         blocks_layout = QHBoxLayout()
-        statuses = repo.list_week_statuses(self.tracker["id"], week_start)
+        statuses = repo.list_week_statuses(self.tracker["id"], self.week_start)
         self.status_buttons = []
 
         for offset in range(7):
-            status_date = week_start + timedelta(days=offset)
+            status_date = self.week_start + timedelta(days=offset)
             day_layout = QVBoxLayout()
 
             date_label = QLabel(str(status_date.day))
@@ -368,8 +368,10 @@ class TrackerPage(QWidget):
 
 
 class OverallPage(QWidget):
-    def __init__(self):
+    def __init__(self, week_start):
         super().__init__()
+
+        self.week_start = week_start
 
         layout = QVBoxLayout()
 
@@ -392,13 +394,11 @@ class OverallPage(QWidget):
         self.refresh()
 
     def refresh(self):
-        today = date.today()
-        week_start = get_week_start(today)
-        week_end = week_start + timedelta(days=6)
-        week_number = get_week_number(today)
+        week_end = self.week_start + timedelta(days=6)
+        week_number = get_week_number(self.week_start)
 
         self.week_label.setText(
-            f"Week {week_number} · {week_start.strftime('%b %d')}–"
+            f"Week {week_number} · {self.week_start.strftime('%b %d')}–"
             f"{week_end.strftime('%b %d')}"
         )
 
@@ -409,7 +409,7 @@ class OverallPage(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-        progress_rows = repo.list_week_progress(week_start)
+        progress_rows = repo.list_week_progress(self.week_start)
 
         if not progress_rows:
             empty_label = QLabel(
@@ -472,10 +472,12 @@ class TrackerTab(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.selected_week_start = get_week_start(date.today())
+
         layout = QVBoxLayout()
 
         self.tracker_tabs = QTabWidget()
-        self.overall_page = OverallPage()
+        self.overall_page = OverallPage(self.selected_week_start)
         self.tracker_tabs.addTab(self.overall_page, "Overall")
 
         for tracker in repo.list_active_trackers():
@@ -492,7 +494,7 @@ class TrackerTab(QWidget):
         self.setLayout(layout)
 
     def add_tracker_tab(self, tracker, index=None):
-        page = TrackerPage(tracker)
+        page = TrackerPage(tracker, self.selected_week_start)
         page.trackerUpdated.connect(
             lambda updated_tracker, tracker_page=page: self.update_tracker_tab(
                 tracker_page, updated_tracker
