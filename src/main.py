@@ -15,7 +15,7 @@ def main():
     window = MainWindow()
     window.show()
 
-    QTimer.singleShot(200, window.center_on_screen)
+    QTimer.singleShot(0, window.center_on_screen)
 
     sys.exit(app.exec())
 
