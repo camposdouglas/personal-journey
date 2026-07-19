@@ -78,3 +78,31 @@ def init_db():
             )
             """
         )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS routine_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schedule_type TEXT NOT NULL CHECK (
+                    schedule_type IN ('weekdays', 'weekends')
+                ),
+                name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+                start_minute INTEGER NOT NULL CHECK (
+                    start_minute BETWEEN 0 AND 1439
+                ),
+                end_minute INTEGER NOT NULL CHECK (
+                    end_minute BETWEEN 0 AND 1439
+                ),
+                color TEXT NOT NULL CHECK (
+                    length(color) = 7
+                    AND substr(color, 1, 1) = '#'
+                    AND substr(color, 2) NOT GLOB '*[^0-9A-Fa-f]*'
+                ),
+                layer_order INTEGER NOT NULL CHECK (layer_order > 0),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (start_minute != end_minute),
+                UNIQUE (schedule_type, layer_order)
+            )
+            """
+        )
