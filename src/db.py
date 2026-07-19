@@ -50,3 +50,17 @@ def init_db():
             )
             """
         )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tracker_daily_statuses (
+                tracker_id INTEGER NOT NULL,
+                status_date TEXT NOT NULL,
+                status INTEGER NOT NULL CHECK (status IN (-1, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (tracker_id, status_date),
+                FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+            )
+            """
+        )
