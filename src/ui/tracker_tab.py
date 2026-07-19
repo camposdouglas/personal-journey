@@ -90,6 +90,7 @@ class CreateTrackerDialog(QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("Create Tracker")
+        self.setMinimumWidth(400)
 
         layout = QFormLayout()
 
