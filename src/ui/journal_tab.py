@@ -296,7 +296,7 @@ class JournalTab(QWidget):
 
         self.clear_title_error()
 
-        temporary_title = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
+        temporary_title = datetime.now().strftime("%d/%m/%Y · %H:%M:%S")
 
         new_item = QListWidgetItem(temporary_title)
         new_item.setData(Qt.UserRole, None)
