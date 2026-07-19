@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 import tracker_repository as repo
-from week_utils import get_week_number, get_week_start
+from week_utils import FOUNDING_WEEK_START, get_week_number, get_week_start
 
 
 class DayStatusButton(QPushButton):
@@ -134,18 +134,17 @@ class TrackerPage(QWidget):
     trackerArchived = Signal()
     progressChanged = Signal()
 
-    def __init__(self, tracker, week_start):
+    def __init__(self, tracker, week_start, read_only=False):
         super().__init__()
 
         self.tracker = tracker
         self.week_start = week_start
+        self.read_only = read_only
         self.is_editing = False
 
         layout = QVBoxLayout()
 
         today = date.today()
-        week_end = self.week_start + timedelta(days=6)
-        week_number = get_week_number(self.week_start)
 
         target = self.tracker["weekly_target"]
         self.name_label = QLabel(self.tracker["name"])
@@ -173,12 +172,6 @@ class TrackerPage(QWidget):
         target_input_layout.addStretch()
         target_input_layout.addWidget(self.target_input)
         target_input_layout.addStretch()
-
-        week_label = QLabel(
-            f"Week {week_number} · {self.week_start.strftime('%b %d')}–"
-            f"{week_end.strftime('%b %d')}"
-        )
-        week_label.setAlignment(Qt.AlignCenter)
 
         blocks_layout = QHBoxLayout()
         statuses = repo.list_week_statuses(self.tracker["id"], self.week_start)
@@ -249,7 +242,6 @@ class TrackerPage(QWidget):
         layout.addWidget(self.name_input)
         layout.addWidget(self.target_label)
         layout.addLayout(target_input_layout)
-        layout.addWidget(week_label)
         layout.addLayout(blocks_layout)
         layout.addWidget(description_title)
         layout.addWidget(self.description_label)
@@ -287,15 +279,18 @@ class TrackerPage(QWidget):
         self.description_label.setVisible(True)
         self.description_input.setVisible(False)
 
-        self.edit_button.setEnabled(True)
-        self.delete_button.setEnabled(True)
+        self.edit_button.setEnabled(not self.read_only)
+        self.delete_button.setEnabled(not self.read_only)
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
 
         for button in self.status_buttons:
-            button.setEnabled(not button.blocked)
+            button.setEnabled(not button.blocked and not self.read_only)
 
     def enter_edit_mode(self):
+        if self.read_only:
+            return
+
         self.is_editing = True
 
         self.name_input.setText(self.tracker["name"])
@@ -376,10 +371,6 @@ class OverallPage(QWidget):
 
         layout = QVBoxLayout()
 
-        self.week_label = QLabel()
-        self.week_label.setAlignment(Qt.AlignCenter)
-        self.week_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
 
@@ -388,21 +379,12 @@ class OverallPage(QWidget):
         self.rows_container.setLayout(self.rows_layout)
         self.scroll_area.setWidget(self.rows_container)
 
-        layout.addWidget(self.week_label)
         layout.addWidget(self.scroll_area)
 
         self.setLayout(layout)
         self.refresh()
 
     def refresh(self):
-        week_end = self.week_start + timedelta(days=6)
-        week_number = get_week_number(self.week_start)
-
-        self.week_label.setText(
-            f"Week {week_number} · {self.week_start.strftime('%b %d')}–"
-            f"{week_end.strftime('%b %d')}"
-        )
-
         while self.rows_layout.count():
             item = self.rows_layout.takeAt(0)
             widget = item.widget()
@@ -477,11 +459,36 @@ class TrackerTab(QWidget):
 
         layout = QVBoxLayout()
 
+        week_navigation_layout = QHBoxLayout()
+        week_navigation_layout.addStretch()
+
+        self.previous_week_button = QPushButton("‹")
+        self.previous_week_button.setFixedWidth(40)
+        self.previous_week_button.clicked.connect(
+            lambda: self.change_week(-1)
+        )
+
+        self.week_navigation_label = QLabel()
+        self.week_navigation_label.setAlignment(Qt.AlignCenter)
+        self.week_navigation_label.setMinimumWidth(240)
+        self.week_navigation_label.setStyleSheet(
+            "font-size: 18px; font-weight: bold;"
+        )
+
+        self.next_week_button = QPushButton("›")
+        self.next_week_button.setFixedWidth(40)
+        self.next_week_button.clicked.connect(lambda: self.change_week(1))
+
+        week_navigation_layout.addWidget(self.previous_week_button)
+        week_navigation_layout.addWidget(self.week_navigation_label)
+        week_navigation_layout.addWidget(self.next_week_button)
+        week_navigation_layout.addStretch()
+
         self.tracker_tabs = QTabWidget()
         self.overall_page = OverallPage(self.selected_week_start)
         self.tracker_tabs.addTab(self.overall_page, "Overall")
 
-        for tracker in repo.list_active_trackers():
+        for tracker in repo.list_trackers_for_week(self.selected_week_start):
             self.add_tracker_tab(tracker)
 
         self.add_tracker_tab_index = self.tracker_tabs.addTab(QWidget(), "+")
@@ -490,12 +497,19 @@ class TrackerTab(QWidget):
         )
         self.last_selected_tab_index = 0
         self.tracker_tabs.currentChanged.connect(self.handle_tab_changed)
+        self.update_week_navigation()
 
+        layout.addLayout(week_navigation_layout)
         layout.addWidget(self.tracker_tabs)
         self.setLayout(layout)
 
     def add_tracker_tab(self, tracker, index=None):
-        page = TrackerPage(tracker, self.selected_week_start)
+        read_only = self.selected_week_start != get_week_start(date.today())
+        page = TrackerPage(
+            tracker,
+            self.selected_week_start,
+            read_only=read_only,
+        )
         page.trackerUpdated.connect(
             lambda updated_tracker, tracker_page=page: self.update_tracker_tab(
                 tracker_page, updated_tracker
@@ -513,6 +527,70 @@ class TrackerTab(QWidget):
 
         self.tracker_tabs.tabBar().setTabData(index, tracker["id"])
         return index
+
+    def change_week(self, direction):
+        for index in range(1, self.add_tracker_tab_index):
+            page = self.tracker_tabs.widget(index)
+
+            if isinstance(page, TrackerPage) and page.is_editing:
+                QMessageBox.information(
+                    self,
+                    "Finish Editing",
+                    "Save or cancel the current tracker edit before changing weeks.",
+                )
+                return
+
+        new_week_start = self.selected_week_start + timedelta(
+            days=direction * 7
+        )
+        current_week_start = get_week_start(date.today())
+
+        if not FOUNDING_WEEK_START <= new_week_start <= current_week_start:
+            return
+
+        self.selected_week_start = new_week_start
+        self.rebuild_week_tabs()
+
+    def rebuild_week_tabs(self):
+        self.tracker_tabs.setCurrentIndex(0)
+
+        for index in range(self.add_tracker_tab_index - 1, 0, -1):
+            page = self.tracker_tabs.widget(index)
+            self.tracker_tabs.removeTab(index)
+            page.deleteLater()
+
+        self.add_tracker_tab_index = 1
+        self.overall_page.week_start = self.selected_week_start
+        self.overall_page.refresh()
+
+        for tracker in repo.list_trackers_for_week(self.selected_week_start):
+            self.add_tracker_tab(tracker, self.add_tracker_tab_index)
+            self.add_tracker_tab_index += 1
+
+        is_current_week = self.selected_week_start == get_week_start(date.today())
+        self.tracker_tabs.setTabEnabled(
+            self.add_tracker_tab_index, is_current_week
+        )
+
+        self.last_selected_tab_index = 0
+        self.update_week_navigation()
+
+    def update_week_navigation(self):
+        week_end = self.selected_week_start + timedelta(days=6)
+        week_number = get_week_number(self.selected_week_start)
+        current_week_start = get_week_start(date.today())
+
+        self.week_navigation_label.setText(
+            f"Week {week_number} · "
+            f"{self.selected_week_start.strftime('%b %d')}–"
+            f"{week_end.strftime('%b %d')}"
+        )
+        self.previous_week_button.setEnabled(
+            self.selected_week_start > FOUNDING_WEEK_START
+        )
+        self.next_week_button.setEnabled(
+            self.selected_week_start < current_week_start
+        )
 
     def update_tracker_tab(self, page, tracker):
         index = self.tracker_tabs.indexOf(page)
