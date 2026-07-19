@@ -1,80 +1,136 @@
 # Personal Journey
 
-Personal Journey is a local desktop application for personal journaling and routine tracking.
+Personal Journey is a single-user, offline desktop application for organizing a
+daily routine, tracking weekly habits, and writing journal entries. It is both a
+personal tool and a learning project focused on PySide6, SQLite, CRUD operations,
+relational data modeling, and maintainable desktop application structure.
 
-The project combines two core features: a journal for written personal entries and a tracker for recording recurring custom events. It is being developed as a practical software project to learn desktop application development, relational databases, CRUD operations, and maintainable application structure.
+## Features
 
-## Purpose
+### Routine
 
-The goal of Personal Journey is to provide a simple local tool for recording personal progress over time.
+- Separate Weekday and Weekend schedules.
+- A 24-hour radial clock with minute-precise blocks.
+- Cross-midnight and overlapping blocks.
+- Custom names and `#RRGGBB` colors.
+- Create, view, edit, and delete persistent routine blocks.
+- Later-saved overlapping blocks appear on top.
 
-The application is intentionally focused on two areas:
+### Tracker
 
-- writing journal entries;
-- tracking whether custom personal events happened.
+- Custom trackers with duplicate names supported through hidden database IDs.
+- Weekly goals from one to seven occurrences.
+- Monday-to-Sunday navigation and completed-week history.
+- Green, red, and gray daily states; only green counts toward progress.
+- Future dates are blocked.
+- Editable names, descriptions, and current-week goals.
+- Archiving removes a tracker from the current week while preserving completed
+  history.
+- An Overall page summarizes progress for every tracker in the selected week.
 
-It is not intended to be a social app, cloud service, productivity platform, or analytics-heavy life management system.
+### Journal
 
-## Core Features
+- Create, read, edit, and delete entries.
+- Automatically generated, editable date-and-time titles.
+- Creation and update timestamps.
+- Plain-text content preservation.
+- Protection against accidentally discarding active edits.
 
-The application will have two main sections:
-
-- Journal
-- Tracker
-
-The Journal section will allow the user to create, read, edit, and delete written entries.
-
-The Tracker section will allow the user to create custom event types and register when those events happen.
-
-## Technical Stack
-
-Personal Journey is planned as a desktop application built with:
+## Technology
 
 - Python
-- PySide6
-- MySQL
+- PySide6 (Qt for Python)
+- SQLite
+- Python `unittest`
 
-The application is designed for a single local user and does not require login, cloud sync, or external services.
+The application requires no login, cloud account, network connection, or external
+service.
 
-## Development Status
+## Project Structure
 
-Current status: early development.
+```text
+personal-journey/
+├── src/
+│   ├── main.py
+│   ├── db.py
+│   ├── journal_repository.py
+│   ├── tracker_repository.py
+│   ├── routine_repository.py
+│   ├── week_utils.py
+│   └── ui/
+├── tests/
+├── data/
+├── docs/
+├── requirements.txt
+└── README.md
+```
 
-The first milestone is Alpha 0.1. Its goal is to create the first working version of the application with a desktop window, separate Journal and Tracker tabs, and MySQL persistence.
+PySide6 widgets handle presentation and interaction. Repository modules contain
+validation and persistence logic, while `db.py` owns SQLite connections and schema
+initialization.
 
-See `docs/scope-alpha-0.1.md` for the current scope.
+## Setup and Run
 
-## Alpha 0.1 Goals
+Create and activate a virtual environment:
 
-Alpha 0.1 should support:
+```bash
+python -m venv .venv
+```
 
-- opening the application as a desktop app;
-- displaying separate Journal and Tracker tabs;
-- connecting to a MySQL database;
-- creating, listing, opening, editing, and deleting journal entries;
-- creating and listing tracker event types;
-- registering tracker event occurrences for the current day;
-- preventing future-dated tracker occurrences.
+On Linux:
 
-## Out of Scope
+```bash
+source .venv/bin/activate
+```
 
-The first version does not include:
+On Windows:
 
-- login;
-- cloud sync;
-- data export;
-- encryption;
-- calendar view;
-- charts;
-- statistics dashboard;
-- mobile version;
-- web version;
-- AI features.
+```powershell
+.venv\Scripts\activate
+```
 
-These features may be considered later after the core application is stable.
+Install dependencies and launch the application:
 
-## Project Principle
+```bash
+pip install -r requirements.txt
+python src/main.py
+```
 
-Personal Journey will grow progressively.
+## Tests
 
-The priority is to build a stable foundation before adding advanced features. Each development step should introduce a clear improvement without expanding the scope unnecessarily.
+Run the complete test suite from the repository root:
+
+```bash
+python -m unittest discover -s tests
+```
+
+The current suite contains 26 repository and UI regression tests. UI tests run
+headlessly and use temporary SQLite databases.
+
+## Local Data and Privacy
+
+Personal data is stored in:
+
+```text
+data/personal_journey.db
+```
+
+The database and its SQLite sidecar files are excluded from Git. Cloning this
+repository therefore provides the application code but not the user's journal,
+tracker, or routine data.
+
+Because Git does not back up the database, copy it only while the application is
+closed or use SQLite's backup API when backup support is added.
+
+## Status
+
+The current local-use milestone is feature-complete for its defined scope. The
+application is ready for daily use.
+
+Potential future work includes database backup and recovery, friendly SQLite error
+messages, Tracker UI regression tests, and standalone packaging. New features
+should be driven by experience using the application rather than added
+speculatively.
+
+The original Alpha 0.1 plan is preserved as a historical document in
+[`docs/scope-alpha-0.1.md`](docs/scope-alpha-0.1.md).
