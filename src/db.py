@@ -1,14 +1,21 @@
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "personal_journey.db"
 
 
+@contextmanager
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def init_db():
