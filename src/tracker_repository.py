@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from db import get_connection
 from week_utils import get_week_start
@@ -78,3 +78,92 @@ def list_active_trackers():
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def list_week_statuses(tracker_id, week_start):
+    week_start = get_week_start(week_start)
+    week_end = week_start + timedelta(days=6)
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT status_date, status
+            FROM tracker_daily_statuses
+            WHERE tracker_id = ?
+              AND status_date BETWEEN ? AND ?
+            ORDER BY status_date
+            """,
+            (tracker_id, week_start.isoformat(), week_end.isoformat()),
+        ).fetchall()
+
+    return {
+        date.fromisoformat(row["status_date"]): row["status"] for row in rows
+    }
+
+
+def toggle_daily_status(tracker_id, status_date, requested_status):
+    if requested_status not in (-1, 1):
+        raise ValueError("Daily status must be -1 or 1.")
+
+    if status_date > date.today():
+        raise ValueError("Future dates cannot be tracked.")
+
+    timestamp = _now()
+    status_date_text = status_date.isoformat()
+
+    with get_connection() as connection:
+        tracker_exists = connection.execute(
+            """
+            SELECT 1
+            FROM trackers
+            WHERE id = ? AND archived_at IS NULL
+            """,
+            (tracker_id,),
+        ).fetchone()
+
+        if tracker_exists is None:
+            raise ValueError("Active tracker not found.")
+
+        existing_row = connection.execute(
+            """
+            SELECT status
+            FROM tracker_daily_statuses
+            WHERE tracker_id = ? AND status_date = ?
+            """,
+            (tracker_id, status_date_text),
+        ).fetchone()
+
+        if existing_row is not None and existing_row["status"] == requested_status:
+            connection.execute(
+                """
+                DELETE FROM tracker_daily_statuses
+                WHERE tracker_id = ? AND status_date = ?
+                """,
+                (tracker_id, status_date_text),
+            )
+            return None
+
+        connection.execute(
+            """
+            INSERT INTO tracker_daily_statuses (
+                tracker_id,
+                status_date,
+                status,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (tracker_id, status_date) DO UPDATE SET
+                status = excluded.status,
+                updated_at = excluded.updated_at
+            """,
+            (
+                tracker_id,
+                status_date_text,
+                requested_status,
+                timestamp,
+                timestamp,
+            ),
+        )
+
+    return requested_status
